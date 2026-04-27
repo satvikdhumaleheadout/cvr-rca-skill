@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{TITLE}}</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js" charset="utf-8"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #F5F5F5;
+      color: #212121;
+      line-height: 1.55;
+      padding: 28px 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* Tables */
+    table { border-collapse: collapse; width: 100%; }
+    th, td { vertical-align: middle; }
+    thead tr th { position: sticky; top: 0; background: #fff; z-index: 1; }
+
+    /* Scrollable table wrappers */
+    .table-scroll { overflow-x: auto; border-radius: 8px; border: 1px solid #E0E0E0; }
+
+    /* Plotly responsive override */
+    .js-plotly-plot { width: 100% !important; }
+
+    /* Print */
+    @media print {
+      body { background: white; padding: 0; }
+      .container { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    {{BODY}}
+  </div>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      {{CHART_SCRIPTS}}
+    });
+  </script>
+</body>
+</html>

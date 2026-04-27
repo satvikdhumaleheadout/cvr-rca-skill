@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{TITLE}}</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js" charset="utf-8"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: #f5f6fa;
+      color: #1a1a2e;
+      font-size: 14px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      font-feature-settings: 'cv11', 'tnum';
+    }
+
+    /* ─── Main container ─────────────────────────────────── */
+    .container {
+      max-width: 1050px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    /* ─── Report header (render.py emits dark #1a1a2e banner) ── */
+    /* Let the banner render naturally — no overrides needed */
+
+    /* ─── Analysis block — wraps each section ─────────────── */
+    .analysis-block {
+      background: #fff;
+      border-radius: 10px;
+      border: 1px solid #e8ebf4;
+      padding: 24px 28px;
+      margin: 20px 0;
+    }
+
+    /* ─── Section label (title inside each block) ─────────── */
+    .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #8892a4;
+      border-bottom: 1px solid #e0e4ef;
+      padding-bottom: 10px;
+      margin-bottom: 16px;
+    }
+
+    .section-subtitle {
+      font-size: 12px;
+      color: #8892a4;
+      margin: -8px 0 14px;
+      font-weight: 500;
+    }
+
+    /* ─── Verdict line (key finding highlight) ─────────────── */
+    .verdict-line {
+      color: #c62828;
+      background: #fdecea;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 12px;
+      line-height: 1.45;
+    }
+    .verdict-line.neutral {
+      color: #3a4a8a;
+      background: #e8edf7;
+    }
+
+    /* ─── Priority badges (action cards) ───────────────────── */
+    .priority-badge { padding: 3px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: .05em; white-space: nowrap; }
+    .priority-badge.p1 { background: #fdecea; color: #c62828; }
+    .priority-badge.p2 { background: #fff8e1; color: #e65100; }
+    .priority-badge.p3 { background: #f1f8e9; color: #2e7d32; }
+
+    /* ─── Tables ─────────────────────────────────────────────── */
+    .container table {
+      font-family: inherit;
+      font-variant-numeric: tabular-nums;
+    }
+    .container table th {
+      background: #f5f6fa !important;
+      color: #8892a4 !important;
+      font-size: 10px !important;
+      font-weight: 700 !important;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      border-bottom: 2px solid #e0e4ef !important;
+    }
+    .container table td {
+      border-bottom: 1px solid #f0f1f5;
+    }
+    .container table tr:last-child td { border-bottom: none; }
+    .container table tr:hover td { background: #fafbfd !important; }
+
+    /* Scrollable table wrapper */
+    .container div[style*="overflow-x:auto"],
+    .container div[style*="overflow-x: auto"] {
+      border: 1px solid #e8ebf4;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    /* ─── Callouts (render.py emits border-left:4px solid) ─── */
+    .container div[style*="border-left:4px solid"],
+    .container div[style*="border-left: 4px solid"] {
+      border-radius: 0 8px 8px 0 !important;
+      padding: 14px 18px !important;
+      margin: 12px 0 !important;
+    }
+
+    /* ─── Metric cards ──────────────────────────────────────── */
+    .container div[style*="border:1px solid #E0E0E0"][style*="border-radius:10px"],
+    .container div[style*="border: 1px solid #E0E0E0"][style*="border-radius: 10px"] {
+      border-color: #e8ebf4 !important;
+      background: #fafbfd !important;
+    }
+
+    /* ─── Plotly ────────────────────────────────────────────── */
+    .js-plotly-plot { width: 100% !important; }
+
+    /* ─── Print ─────────────────────────────────────────────── */
+    @media print {
+      body { background: #fff; }
+      .analysis-block { border: 1px solid #ddd; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  {{BODY}}
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    {{CHART_SCRIPTS}}
+  });
+</script>
+
+</body>
+</html>
