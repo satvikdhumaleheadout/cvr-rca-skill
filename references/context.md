@@ -648,6 +648,32 @@ strong supply signal.
 
 ---
 
+## Investigation tree — L0 to L1 branch map
+
+The three L0 signals (mix_dominance, shapley, trend_context) each open a
+specific set of L1 branches. Use this table as the default starting set —
+then adapt based on what the data actually shows.
+
+| L0 signal | Value / pattern | L1 branches to open |
+|-----------|----------------|---------------------|
+| `mix_dominance.is_dominant = true` | Routing story | (a) Which MB/HO segment or channel drove the shift? (b) Which specific URLs or channels gained/lost volume? |
+| Shapley: LP2S dominates | LP2S is the funnel story | (a) Device × LP2S — mobile-concentrated? (b) Page type × LP2S — Collection vs Experience? (c) Price change for top experiences? (d) Specific URL-level traffic loss? |
+| Shapley: S2C dominates | S2C is the funnel story | (a) Experience-level S2C + availability proxy (count_days_available_30d)? (b) Lead time distribution shift? (c) MB vs HO S2C split — concentrated in one segment? |
+| Shapley: C2O dominates | C2O is the funnel story | (a) C2A vs A2O sub-decomposition (which sub-metric moved)? (b) Channel × C2O — paid vs organic? (c) Device × C2O — mobile checkout friction? |
+| Trend: sharp break on date X | Event on date X | (a) What dimension shows the largest rate change anchored to that date? (b) Paid campaign change? Deploy? Supply configuration? |
+| Trend: gradual erosion | Compounding trend | (a) Supply trend (availability proxy over time)? (b) Pricing trend? (c) Traffic quality trend (channel mix shift)? |
+| Trend: seasonal (`structural_delta_cvr` small) | Calibrate depth | Still investigate — but use `structural_delta_cvr` as the magnitude to explain, not `current_delta_cvr`. Any finding must account for the non-seasonal share. |
+
+Multiple L0 signals combine. If S2C dominates AND trend shows a sharp break,
+the L1 batch is: "experience-level S2C anchored to break date" + "availability
+proxy change on that date". If mix is dominant AND gradual, the L1 batch is
+"which channel or URL has been losing traffic over the past N weeks".
+
+The table is the default starting set. It does not replace reading the actual
+numbers — if a signal points in an unexpected direction, follow it.
+
+---
+
 ## Common Investigation Patterns
 
 These are not rails — they are the directions the evidence typically points.
@@ -736,3 +762,4 @@ thinking and makes the inference scannable.
 |---|------|---------|
 | c001 | 2026-04-24 | Initial version — Headout business context, CE definition, MB/HO, funnel steps, dimensions, channels, table schemas |
 | c002 | 2026-04-27 | Added Query Principles (majority-contributor, rate×volume), Q3 Trend Interpretation guide, Dimensions to Query and When, Common Investigation Patterns per funnel step, Session Recordings guidance. All moved from SKILL.md as part of process/domain separation. |
+| c003 | 2026-04-27 | Added "Investigation tree — L0 to L1 branch map" section — lookup table mapping L0 signal combinations to default L1 branch sets. |

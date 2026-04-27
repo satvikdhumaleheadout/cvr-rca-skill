@@ -117,8 +117,8 @@ Mixpanel MCP calls.
 
 ## Step 2 — Investigate
 
-Read `summary.json`. Answer the three mandatory questions in order — each
-determines what to look at next. Then form hypotheses and query.
+Read `summary.json`. Then run the investigation as a tree: orient at L0 using
+everything that is already computed, open branches at L1, descend to a leaf.
 
 ### Start the investigation transcript
 
@@ -130,85 +130,115 @@ Before reading the data, open the transcript file:
 
 Create it if it doesn't exist (`mkdir -p ~/Documents/RCA\ skill/transcripts`).
 
-Append an entry each time you make a meaningful decision:
+The transcript mirrors the tree structure. Write it as you go — a section for
+each level, a batch label for each group of parallel queries:
 
-```
-### [Decision point name]
-Hypothesis: what you were testing
-Data: exact fields and values you looked at
-Decision: which path you took
-Ruled out: what you dismissed and why
+```markdown
+# Investigation Transcript — CE [id] · [name]
+Pre: [dates] | Post: [dates]
+
+## L0 — Orient
+**mix_dominance:** [is_dominant value + what it means for this CE]
+**shapley:** [LP2S Xpp · S2C Xpp · C2O Xpp — primary step and share of ΔCVR]
+**trend_context:** [shape: sharp/gradual/recovery + pre_period_healthy + structural_delta_cvr]
+Branches opening at L1: [list each hypothesis as a one-liner]
+
+## L1 — [descriptive label for this level's focus]
+### [Hypothesis A name] · [Hypothesis B name] — parallel
+**[Hypothesis A]**
+Query: [what you tested and why this hypothesis]
+Result: [key numbers — rates, counts, deltas]
+→ Opens L2: [sub-hypotheses if confirmed] | Closes: [what this rules out]
+
+**[Hypothesis B]**
+Query: [...]
+Result: [...]
+→ Ruled out / Opens L2: [...]
+
+## L2 — [descriptive label]
+### [Hypothesis C name] — targeted follow-up
+[same format]
+
+## Root cause confirmed
+[One paragraph: the mechanism, the segment, the timing — fully stated.
+Every number in this paragraph must trace to a named query result above.]
 ```
 
-Required entries: one for each of the three mandatory questions, one for each
-dimension or custom query you ran, and one for the verdict synthesis. If a path
-produced nothing actionable, say so and say why you stopped.
+If a branch produces nothing actionable, write that explicitly ("Ruled out —
+no concentration in device or language; uniform drop across all cuts") and stop
+that branch. Do not descend further unless the data gives you a reason to.
 
 ---
 
-### The three questions you cannot skip
+### L0 — Orient from summary.json
 
-**Question 1: Is this a routing problem or a conversion problem?**
+Read `summary.json` and extract all three orientation signals at once. These
+three signals are read simultaneously — they are not a sequential gate.
 
-Check `mix_dominance.is_dominant`. If true and no funnel step shows a meaningful
-rate change, this is a traffic composition story — investigate where and why
-traffic shifted, not the funnel steps themselves. If false, continue to Question 2.
+**Signal 1 — mix_dominance (routing vs conversion)**
+
+Check `mix_dominance.is_dominant`. If true, the primary story is traffic
+composition: MB/HO share or channel mix shifted enough to explain the drop
+without any funnel step breaking. The investigation pivots to "where and why
+did traffic shift" rather than "which step broke". If false, the drop is a
+conversion problem — continue to shapley.
 
 See `context.md` → "MB vs HO" and "Channels" for what mix signals mean.
 
+**Signal 2 — shapley (which step is the story)**
+
+Check `shapley`. Identify which step(s) carry the majority of ΔCVR. The entire
+investigation is anchored to those steps. Do not deep-dive steps that carry
+less than ~10% of the delta — even if a rate change is visible there, it is not
+the driver.
+
+See `context.md` → "Investigation tree — L0 to L1 branch map" for how each
+shapley outcome opens specific L1 branches.
+
+**Signal 3 — trend_context (timing and seasonal calibration)**
+
+Read the 90-day trend shape, `pre_period_healthy`, `structural_delta_cvr`, and
+the weekday composition:
+
+- **Sharp break** → something changed on a specific date. That date is the
+  most important clue. L1 branches should include a date-of-change cut.
+- **Gradual erosion** → something has been compounding. Look for trends in
+  supply, pricing, or traffic quality rather than a single event.
+- **Recovery in progress** → the pre window may already be below normal; the
+  pre/post delta understates the real change.
+- **seasonal component** → compare `current_delta_cvr` to `ly_delta_cvr`. If
+  `structural_delta_cvr` is small, calibrate investigation depth accordingly.
+  A small structural delta raises the bar for concluding "new problem".
+- **Weekday composition** → count weekday vs weekend days in pre and post. A
+  post period heavy in weekends can produce apparent drop with no real change.
+
+See `context.md` → "Q3 Trend Interpretation" for full interpretation guide.
+
 ---
 
-**Question 2: Which step is the primary driver?**
+### L1+ — Branch and descend
 
-Check `shapley`. Identify which step(s) carry the majority of ΔCVR. Everything
-that follows is anchored to those steps — do not deep-dive steps that carry
-less than ~10% of the delta.
-
----
-
-**Question 3: Was this sudden, gradual, or seasonal?**
-
-Using `trend_context` from `summary.json`:
-
-- **Step 3a:** Read the 90-day trend shape — sharp break, gradual erosion, or
-  recovery in progress. Also check `trend_context.pre_period_healthy`.
-- **Step 3b:** Compare `current_delta_cvr` to `ly_delta_cvr`. Compute whether
-  the drop has a seasonal component or is fully structural.
-- **Step 3c:** Check weekday composition — a post period with more weekends can
-  produce an apparent drop with no real change.
-
-See `context.md` → "Q3 Trend Interpretation" for what each pattern implies and
-how to calibrate investigation depth from `structural_delta_cvr`.
-
-The answer to Q3 determines what you look for: sudden → what changed on that
-date; gradual → what is eroding; seasonal → quantify structural delta and
-calibrate depth accordingly.
-
----
-
-### Form hypotheses, then query to test them
-
-After the three questions, consult `hypothesis.md` for historical patterns.
-Use it to orient thinking — not to constrain it. Then write 2–4 specific,
-falsifiable hypotheses before running another query. These must be mechanisms,
-not observations:
+After L0, write 2–4 specific, falsifiable hypotheses. These are the L1
+branches. A hypothesis must name a mechanism, a segment or experience, and the
+pattern you would expect if it were true:
 
 - *Observation* (wrong): "S2C dropped on mobile"
 - *Hypothesis* (right): "The Apr 8 mobile deploy broke date-picker rendering
   on iOS, causing users to see no available slots and abandon the select page"
 
-Each hypothesis should name a cause, a segment or experience, and the pattern
-you would expect to see if it were true. Then test each one with a targeted
-BQ query.
+Run all L1 hypotheses in parallel — one query batch, results read together.
+Consult `hypothesis.md` for historical priors when forming L1 hypotheses.
 
----
+Each result either:
+- **Confirms** → open a L2 branch that tests the mechanism more specifically
+- **Rules out** → close that branch, state why, and do not revisit
+- **Concentrates** → the dimension cut showing the largest impact becomes the
+  anchor for all L2 queries
 
-### Writing and running custom queries
-
-Custom queries are the primary investigation tool from this point forward.
-Write each query from scratch to test your specific hypothesis. Full table
-schemas, column definitions, query rules, investigation patterns per funnel
-step, and dimension guidance are all in `context.md`.
+Continue descending (L2, L3 if needed) until you reach a leaf: a specific
+mechanism at a specific segment/experience/URL/date that fully explains the rate
+and volume impact. Queries at each level are written from scratch — full table
+schemas and column definitions are in `context.md`.
 
 Run queries with:
 ```bash
@@ -219,37 +249,89 @@ bq query --use_legacy_sql=false --format=json --quiet \
 SQL
 ```
 
-Log each query in the transcript with the hypothesis it was testing and what
-you found.
-
 ---
 
-### Mixpanel session recordings
+### Session recordings — required once a locus is confirmed
 
-Once a specific locus is confirmed — a particular URL, experience (TGID), device
-type, page type, or cross-cut — pull session recordings using the Mixpanel MCP
-(`Get-User-Replays-Data`). Any concentrated dimension cut is sufficient; you do
-not need all dimensions confirmed simultaneously. Pass the CE ID, the post-period
-date range, and the dimension that defines the locus.
+Once a specific locus is confirmed (URL, experience, device, page type, or any
+concentrated cross-cut), pull session recordings using the Mixpanel MCP
+(`Get-User-Replays-Data`). Any single confirmed dimension is sufficient — you
+do not need all dimensions locked simultaneously.
 
-This is a required step once a locus is confirmed — recordings move a finding
-from "consistent with" to "directly observed."
+Recordings move a finding from "consistent with" to "directly observed." They
+are not optional once a locus exists.
 
-If recordings are skipped, the report must explicitly state why (volume too low,
-or no concentrated locus identified). Skipping without explanation is not
-acceptable once a locus has been confirmed.
-
-Do not pull recordings speculatively before a locus has been identified.
+If recordings are skipped, the report must explicitly state why (volume too low
+or no concentrated locus found). Do not pull recordings speculatively before a
+locus is identified.
 
 See `context.md` → "Session Recordings" for what to look for and how to
 interpret results.
 
 ---
 
+## Step 2b — Synthesise findings and review
+
+Before writing HTML, write a structured findings summary. This is not a draft
+report — it is a short markdown file that forces every major claim to be made
+explicit and checked before it is committed to the report.
+
+Save to: `/tmp/cvr_rca_<ce_id>/findings.md`
+
+**Write the findings summary:**
+
+```markdown
+## Root cause
+[One sentence: what broke, in which segment, by how much]
+
+## Mechanism
+[The causal chain — what actually happened, not just what the data shows]
+
+## Timing
+[Sudden / gradual / seasonal — and the key evidence for that classification]
+
+## Evidence inventory
+| Claim | Supporting data | Source | Confidence |
+|-------|----------------|--------|------------|
+| [claim] | [specific numbers or observation] | [summary.json field / query result / report table row] | Confirmed / Consistent with / Unverified |
+
+## Open items
+[Each Consistent with / Unverified row that a query could close]
+[Any number surfaced in the investigation that has no place in the narrative]
+[Any recommendation you plan to make that you have not verified yourself]
+```
+
+**Then re-read it critically and resolve each open item:**
+
+- **Query would close it** → write and run it, update Evidence inventory
+- **Arithmetic on existing data** → compute it, add result to Evidence inventory
+- **Genuinely unresolvable** → accept "Consistent with" and ensure the report
+  language reflects that — do not present it as confirmed
+
+**Specific checks before proceeding:**
+
+- Any calendar event (holiday, peak, school break) cited as a cause → is there
+  a controlled comparison showing the metric with vs. without those dates?
+- Any number that appeared in the investigation but isn't connected to the root
+  cause narrative → either connect it or explicitly rule it out in the report
+- Any recommendation you plan to make → did you actually verify the claim that
+  justifies it, or are you passing an unverified hypothesis to the DRI?
+- **Every count or computed metric cited anywhere in findings.md** — it must
+  have a named Source in the Evidence inventory (a `summary.json` field, a
+  logged BQ query result, or a specific table row that will appear in the
+  report). If you cannot name the source, either derive the number explicitly
+  with written arithmetic, or remove it. A number with no named source must not
+  enter the report — it is a hallucination risk.
+
+Once all open items are resolved or explicitly accepted, proceed to Step 3.
+
+---
+
 ## Step 3 — Write the report
 
-Follow `report_structure.md` exactly. Write the output to:
-`/tmp/cvr_rca_<ce_id>/report.html`
+Follow `report_structure.md` exactly. Write from the solidified `findings.md` —
+the findings summary is the source of truth for every claim in the report.
+Write the output to: `/tmp/cvr_rca_<ce_id>/report.html`
 
 For a concrete walkthrough of how an investigation unfolds end-to-end, see
 `references/worked_example.md`.
@@ -257,6 +339,9 @@ For a concrete walkthrough of how an investigation unfolds end-to-end, see
 ---
 
 ## Step 4 — Evaluate the analysis
+
+**Purpose:** pure scoring and quality tracking. Investigation gaps should have
+been closed in Step 2b — the evaluator is not a patch mechanism, it is a record.
 
 Run this after the report is written. Read the rubric first:
 
@@ -312,8 +397,14 @@ Evaluation → [EVAL_FILE]
 
 Do not narrate the full evaluation in chat. The file is the record.
 
-Saved evaluations accumulate in `~/Documents/RCA skill/evals/`. Review across
-runs to identify systematic weaknesses worth addressing in the skill itself.
+Saved evaluations accumulate in `~/Documents/RCA skill/evals/`. They are the
+signal for improving the skill over time — not for patching individual reports.
+
+When the same improvement appears across multiple evals (e.g., session
+recordings consistently not pulled, seasonal events never quantified with a
+controlled comparison), that is a signal to update the skill files —
+`context.md`, `hypothesis.md`, or `SKILL.md` — so the investigation logic
+catches it earlier next time, rather than adding more loops within the skill.
 
 ---
 
@@ -341,3 +432,6 @@ runs to identify systematic weaknesses worth addressing in the skill itself.
 | c007 | 2026-04-27 | Stripped SKILL.md to pure process. All domain knowledge, analytical guidance, query rules, dimension guides, investigation patterns, and worked examples moved to context.md and references/worked_example.md. |
 | c008 | 2026-04-27 | Removed confusing or redundant lines: "no render.py" negative instruction, internal Q0/Q1/Q3/Q7 stage names, raw stage file paths, Plotly color codes and chart instructions (already in report_structure.md), three-section structure restatement (already in report_structure.md), "Under development" backlog items that implied Claude should add banners for unimplemented features. |
 | c009 | 2026-04-27 | Default window changed to 30/30 days. Dates are now optional in the invocation — when omitted, the script computes last 30 days as post and the prior 30 days as pre. |
+| c010 | 2026-04-27 | Added Step 2b — Synthesise findings and review. Claude writes a structured findings.md (root cause, mechanism, timing, evidence inventory, open items) before writing HTML. Open items — unverified claims, floating data points, unquantified recommendations — are resolved with follow-up queries or arithmetic before proceeding. Step 3 now writes from findings.md as the source of truth. Step 4 clarified as pure scoring; meta-review pattern documented for updating skill files across runs. |
+| c011 | 2026-04-27 | Evidence inventory gains a Source column — every claim with a number must name its source (summary.json field, BQ query result, or report table row). Added fourth specific check: any count or metric with no named source must be derived explicitly or removed before entering the report. Quick Reference block updated: date default changed from weekly Mon–Sun windows to 30/30 days (yesterday − 30 days as post, prior 30 days as pre), matching SKILL.md c009. |
+| c012 | 2026-04-27 | Investigation model redesigned from sequential three-question gates to an investigation tree. L0 reads all three orientation signals simultaneously (mix_dominance, shapley, trend_context) then opens parallel L1 branches. Investigation descends level-by-level until a leaf (specific mechanism × segment × date). Transcript format mirrors the tree structure (L0 section, L1/L2 sections with parallel batch labels, Root cause confirmed paragraph). context.md gains "Investigation tree — L0 to L1 branch map" lookup table. worked_example.md rewritten with tree-format transcripts and parallel query batches explicit. |
