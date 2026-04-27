@@ -505,3 +505,234 @@ experience names onto funnel results and for product-level price/rating metadata
 LEFT JOIN `headout-analytics.analytics_reporting.dim_experiences` AS de
     ON funnel.experience_id = de.experience_id
 ```
+
+---
+
+## Query Principles
+
+These apply to every custom query written during an investigation.
+
+### Majority-contributor principle
+
+When evaluating any URL, TGID, language, device, country, or other dimension
+value as a contributor to the overall drop, focus on entities that collectively
+account for the majority of CE traffic on the affected metric. Long-tail entities
+produce high-variance rate estimates that are likely noise — a 40% S2C drop on
+25 users is not evidence; a 5% S2C drop on 3,000 users is. Before citing any
+entity as a driver, ask: does it represent a meaningful share of CE traffic, or
+is it so small that a few bookings going differently would reverse the finding?
+The threshold adapts to the CE — what matters is relative share, not an absolute
+user count.
+
+### Rate × volume before declaring a primary driver
+
+A rate delta is not impact. When two segments show different rate changes — one
+large on a small segment, one small on a large segment — always compute the
+absolute checkout or order loss from each before concluding which drives the
+overall drop. Impact = rate change × volume of users exposed to that rate.
+"Segment A has a much bigger rate drop" and "segment A drives the overall CVR
+drop" are not the same claim and can point in opposite directions when volume
+is lopsided. Always state both the rate delta and the absolute impact when
+reporting a segment finding.
+
+---
+
+## Q3 Trend Interpretation
+
+This section explains how to read `trend_context` from `summary.json` and what
+each pattern implies for the investigation.
+
+### 90-day trend shape (Step 3a)
+
+Three patterns to recognise:
+
+- **Sharp break:** CVR was stable for weeks, then dropped on a specific date.
+  Something changed that day — a deploy, pricing update, availability
+  configuration, or supply event. That date is the single most important clue
+  in the entire investigation. Go directly to what changed on that date across
+  every dimension.
+
+- **Gradual erosion:** CVR has been drifting down for weeks or months before
+  the post period started. The pre/post Shapley delta understates the true
+  structural change. Dimension cuts and supply trends become the primary tools.
+  Check if a supply or pricing trend is compounding over time.
+
+- **Recovery in progress:** CVR dropped earlier and is now recovering. The
+  pre/post comparison may show no problem while the 90-day trend shows a prior
+  incident. Understand the prior incident before concluding the current period
+  is healthy.
+
+Also check `trend_context.pre_period_healthy`. If `false`, the pre window was
+already below the preceding 60-day trend — Shapley understates the true change,
+and the investigation start point should be treated as earlier than `pre_start`.
+
+### LY overlay (Step 3b)
+
+Compare `current_delta_cvr` to `ly_delta_cvr`:
+
+- **Similar delta at the same calendar position:** consistent with a seasonal
+  pattern. Before treating it as a new incident, check `structural_delta_cvr`
+  (current minus LY). A −3pp drop where LY showed −2.5pp has only −0.5pp of
+  structural change — calibrate investigation depth accordingly. A small
+  structural delta does not mean the investigation ends; it means the bar for
+  concluding "new problem" is higher.
+
+- **LY shows flat or positive at the same position:** the entire drop is
+  structural. No seasonal explanation applies — investigate fully.
+
+- **LY unavailable** (`trend_context.available` is false): note this in the
+  transcript and proceed without seasonal context.
+
+### Weekday composition (Step 3c)
+
+A post period with more weekends than the pre period can produce an apparent
+CVR drop with no real change — weekend visitors typically have lower purchase
+intent than weekday visitors for many CE types. Count the weekday vs weekend
+mix in each period before attributing the magnitude to a product or supply cause.
+
+---
+
+## Dimensions to Query and When
+
+The baseline pipeline does not compute dimension cuts. Write custom queries from
+`context.md` schemas when your hypothesis points to one of these dimensions.
+
+### `browsing_country` / `browsing_city`
+
+Query when the drop might be geographically concentrated. A CVR drop entirely
+in one market (e.g., United Kingdom) points to geo-specific pricing, a campaign
+pause, or a local supply issue rather than a platform-wide problem.
+
+### `channel_name` (granular channel)
+
+Query when the paid/organic channel mix is shifting but you need to know which
+specific channel. "Google Ads paused" and "affiliate quality dropped" both show
+up as a paid mix shift but require completely different actions. A drop
+concentrated in one channel almost always traces to a campaign quality or budget
+change rather than a product problem.
+
+### `lead_time_days`
+
+Query when S2C is the primary driver and an availability scarcity hypothesis is
+live. A sudden scarcity of near-term availability pushes users toward longer lead
+times; if those users convert worse, S2C drops even if the product hasn't
+changed. Compare the pre/post lead time distribution for users who reached
+checkout (filter `has_checkout_started = TRUE`).
+
+### `page_sub_type`
+
+Query for MB microsite traffic when a specific microsite page variant is
+suspected. A drop concentrated in one sub-type isolates the issue to that
+page template rather than the whole CE.
+
+### `previous_page_url`
+
+Query when a traffic source change hypothesis is live. Where users came from
+before the session started can change the intent profile entirely — a new
+referrer or different campaign landing page shows up here.
+
+### Cross-dimensional cuts
+
+When two dimensions both show a signal, the actual root cause may be at their
+intersection. If device shows a mobile drop AND language shows a French drop,
+the real number is French × iOS — it may be 10× larger than either dimension
+alone. Always test the intersection before concluding the causes are independent.
+
+### Experience-level with availability proxy
+
+For S2C hypotheses, query `COUNT(DISTINCT user_id)` and S2C rate by
+`experience_id` pre vs post. Then join `product_rankings_features` on
+`experience_id` + `event_date` to get `count_days_available_30d` per experience
+per day. A drop in available days that coincides with the S2C drop timing is a
+strong supply signal.
+
+---
+
+## Common Investigation Patterns
+
+These are not rails — they are the directions the evidence typically points.
+Start here, but follow what the data actually shows.
+
+### If mix is the primary explanation
+
+Write a query: `COUNT(DISTINCT user_id)` by `page_url` pre vs post for the
+affected segment (MB or the channel that shifted). Which URLs gained or lost
+volume? If a paid campaign was serving specific collection pages in the pre
+period and stopped, those pages will show a sharp traffic drop. That is the
+finding. Marketing owns it.
+
+### If LP2S is the primary driver
+
+LP2S is about whether users landing on the listing page click through to the
+select page. Start with the trend shape (Question 3), then form hypotheses.
+
+Angles worth querying:
+- `device_type` × LP2S rate pre/post — mobile-concentrated drops point to a
+  UI or performance change
+- `language` × LP2S rate — a single language dropping points to geo-specific
+  pricing or a localised UX issue
+- `page_type` × LP2S rate — a drop in Collection but not Experience pages points
+  to browse-level friction
+- `final_price_usd` from `product_rankings_features` pre vs post for top
+  experiences — did prices increase, and does the timing coincide with LP2S drop?
+- `page_url` level — which specific pages drove the drop? A drop concentrated
+  on 2–3 URLs is more actionable than a broad CE-wide decline
+
+When a dimension shows a concentrated signal, run the cross-cut to confirm the
+intersection, then drill to URL-level within that segment.
+
+### If S2C is the primary driver
+
+S2C is about whether users on the select/date-picker page proceed to checkout.
+
+Angles worth querying:
+- `experience_id` level S2C rate pre/post — a concentrated drop in one or two
+  experiences points to a supply or pricing issue specific to those products
+- `count_days_available_30d` from `product_rankings_features` per experience —
+  a meaningful drop in available days correlates with S2C drops
+- `lead_time_days` distribution — did the post period skew toward shorter lead
+  times (less available inventory near-term)?
+- If broad across experiences and sudden in trend: think checkout flow or
+  availability configuration change rather than a per-experience supply issue
+
+### If C2O is the primary driver
+
+Check `c2o_sub` from `summary.json` first. C2O = C2A × A2O and they point to
+completely different causes:
+
+- **C2A drop** → users abandoned before submitting payment: checkout UX
+  friction, price display at checkout, coupon code breakage, trust signal
+  missing. DRI: Product.
+- **A2O drop** → users submitted payment but order failed: payment gateway
+  issue, fraud rule tightening, card decline rate increase. DRI: Payments.
+
+Knowing which sub-metric moved determines who acts and what to query next.
+
+---
+
+## Session Recordings
+
+Once a specific locus is confirmed (URL, experience, device, page type, or
+cross-cut), pull recordings with the Mixpanel MCP (`Get-User-Replays-Data`).
+
+**What to look for:** patterns in what users actually experienced — an empty
+availability calendar, a broken date picker, a slow page load, a confusing
+layout change, a checkout form error. Use what you observe as direct evidence.
+It converts "S2C dropped on the Paris river cruise select page" into "users
+consistently encountered an empty date picker on the Paris river cruise select
+page after Apr 8, likely because availability for that period was not loaded."
+
+**In the report:** present session recordings as a structured table (one row per
+recording) with columns: Recording | Steps observed | Inference. The inference
+column states in one sentence what the recording proves or rules out. Do not
+write session recording evidence as a prose block — the table forces structured
+thinking and makes the inference scannable.
+
+---
+
+## Changelog
+
+| # | Date | Changes |
+|---|------|---------|
+| c001 | 2026-04-24 | Initial version — Headout business context, CE definition, MB/HO, funnel steps, dimensions, channels, table schemas |
+| c002 | 2026-04-27 | Added Query Principles (majority-contributor, rate×volume), Q3 Trend Interpretation guide, Dimensions to Query and When, Common Investigation Patterns per funnel step, Session Recordings guidance. All moved from SKILL.md as part of process/domain separation. |
