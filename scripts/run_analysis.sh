@@ -2,34 +2,31 @@
 # run_analysis.sh — Runs all BQ queries and produces summary.json
 #
 # Usage:
-#   ./run_analysis.sh <ce_id> <pre_start> <pre_end> <post_start> <post_end>
+#   ./run_analysis.sh <ce_id> [<pre_start> <pre_end> <post_start> <post_end>]
 #
-# Example:
-#   ./run_analysis.sh 167 2024-04-01 2024-04-07 2024-04-08 2024-04-14
+# Dates are optional. When omitted, defaults to:
+#   post  = last 30 days  (yesterday back 30 days)
+#   pre   = 30 days before that
 #
-# Output:
-#   /tmp/cvr_rca_<ce_id>/summary.json    ← Claude reads this
-#   /tmp/cvr_rca_<ce_id>/stage*.json     ← raw BQ output (kept for debugging)
-#
-# Query execution order:
-#   Q0 (serial)  → CE name + top page URL              → stage0.json
-#   Q1 (serial)  → base funnel, determines PRIMARY_MBHO → stage1.json
-#   Q3+Q7 (parallel) → daily trend (pre/post) + 90-day rolling trend + LY
-#
-# Demoted to reference-only (not auto-run — Claude queries these when needed):
-#   Q2 → dimension cuts (device / language / page_type)
-#   Q4 → experience-level breakdown
-#   Q5 → price analysis
-#   Q6 → URL-level funnel
-# SQL templates remain in references/ for Claude to adapt during investigation.
+# Examples:
+#   ./run_analysis.sh 167
+#   ./run_analysis.sh 167 2024-03-01 2024-03-30 2024-03-31 2024-04-29
 
 set -euo pipefail
 
-CE_ID="${1:?Usage: run_analysis.sh <ce_id> <pre_start> <pre_end> <post_start> <post_end>}"
-PRE_START="${2:?Missing pre_start}"
-PRE_END="${3:?Missing pre_end}"
-POST_START="${4:?Missing post_start}"
-POST_END="${5:?Missing post_end}"
+CE_ID="${1:?Usage: run_analysis.sh <ce_id> [pre_start pre_end post_start post_end]}"
+
+# ── Default date windows (30/30) — override by passing all four date args ──────
+_date_offset() {
+  # Cross-platform: try BSD date (macOS) then GNU date (Linux)
+  if date -v-"${1}"d '+%Y-%m-%d' 2>/dev/null; then return; fi
+  date -d "${1} days ago" '+%Y-%m-%d'
+}
+
+PRE_START="${2:-$(_date_offset 60)}"
+PRE_END="${3:-$(_date_offset 31)}"
+POST_START="${4:-$(_date_offset 30)}"
+POST_END="${5:-$(_date_offset 1)}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REFS_DIR="$SCRIPT_DIR/../references"
@@ -116,3 +113,10 @@ echo ""
 echo "Analysis complete."
 echo "Summary  → $OUTPUT_DIR/summary.json"
 echo "Raw data → $OUTPUT_DIR/stage{0,1,3,7}.json  (keep for debugging)"
+echo "Windows  → pre: $PRE_START – $PRE_END  |  post: $POST_START – $POST_END"
+# Changelog
+# c001 2026-04-24 Initial version
+# c002 2026-04-27 Default 30/30-day window — dates are now optional args; script
+#                 computes POST_END=yesterday, POST_START=30d ago, PRE_END=31d ago,
+#                 PRE_START=61d ago when not supplied. Cross-platform _date_offset()
+#                 helper handles both BSD (macOS) and GNU (Linux) date.

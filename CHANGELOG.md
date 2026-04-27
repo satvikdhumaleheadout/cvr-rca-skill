@@ -107,4 +107,22 @@ This makes the skill easier to maintain: process changes update `SKILL.md`, anal
 
 ---
 
+## [v1.2] — 2026-04-27 — Default analysis window changed to 30 days
+
+**Summary:** The skill previously required explicit date arguments every time it was invoked. Dates are now optional — when omitted, the script automatically uses the last 30 days as the post period and the 30 days before that as the pre period. This removes the most common friction point when starting a quick investigation.
+
+### Changes by file
+
+**`SKILL.md`** (c009)
+- Invocation syntax updated from required `<pre_start> <pre_end> <post_start> <post_end>` to optional `[<pre_start> <pre_end> <post_start> <post_end>]`
+- Added one-line note explaining the default: last 30 days = post, prior 30 days = pre
+
+**`scripts/run_analysis.sh`** (c002)
+- Date arguments are now optional. When not supplied, the script computes: `POST_END` = yesterday, `POST_START` = 30 days ago, `PRE_END` = 31 days ago, `PRE_START` = 61 days ago
+- Added cross-platform `_date_offset()` helper that works on both BSD `date` (macOS) and GNU `date` (Linux)
+- Script now prints the resolved date windows at the end of every run so it is always visible which periods were used
+- Cleaned up header comments: removed stale Q2/Q4/Q5/Q6 "demoted" note that no longer applies
+
+---
+
 *Each future entry in this changelog corresponds to one GitHub push. Format: `[vX.Y] — YYYY-MM-DD — Short title` followed by a summary of what changed and why.*

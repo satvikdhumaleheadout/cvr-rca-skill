@@ -55,8 +55,11 @@ being necessary to the finding.
 ## Invocation
 
 ```
-/cvr-rca <ce_id> <pre_start> <pre_end> <post_start> <post_end>
+/cvr-rca <ce_id> [<pre_start> <pre_end> <post_start> <post_end>]
 ```
+
+Dates are optional. When omitted, the script defaults to **last 30 days vs the
+30 days before that** (yesterday back 30 days = post; the prior 30 days = pre).
 
 ---
 
@@ -337,3 +340,4 @@ runs to identify systematic weaknesses worth addressing in the skill itself.
 | c006 | 2026-04-27 | Removed Q2/Q4/Q5/Q6 template pointer; fixed stale summary.json field references in investigation patterns |
 | c007 | 2026-04-27 | Stripped SKILL.md to pure process. All domain knowledge, analytical guidance, query rules, dimension guides, investigation patterns, and worked examples moved to context.md and references/worked_example.md. |
 | c008 | 2026-04-27 | Removed confusing or redundant lines: "no render.py" negative instruction, internal Q0/Q1/Q3/Q7 stage names, raw stage file paths, Plotly color codes and chart instructions (already in report_structure.md), three-section structure restatement (already in report_structure.md), "Under development" backlog items that implied Claude should add banners for unimplemented features. |
+| c009 | 2026-04-27 | Default window changed to 30/30 days. Dates are now optional in the invocation — when omitted, the script computes last 30 days as post and the prior 30 days as pre. |
