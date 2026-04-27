@@ -130,43 +130,64 @@ Before reading the data, open the transcript file:
 
 Create it if it doesn't exist (`mkdir -p ~/Documents/RCA\ skill/transcripts`).
 
-The transcript mirrors the tree structure. Write it as you go — a section for
-each level, a batch label for each group of parallel queries:
+The transcript has two layers: a **tree map** at the top that shows the full
+branch structure at a glance, and **detail sections** below with query results.
+Write both as you go.
 
 ```markdown
 # Investigation Transcript — CE [id] · [name]
 Pre: [dates] | Post: [dates]
 
+## Tree map
+<!-- Update this block each time a branch resolves. -->
+L0: [primary signal summary — e.g. "S2C (83% Δ) · gradual · structural"]
+├─ L1a: [hypothesis name]  →  [CONFIRMED / RULED OUT / OPEN] ([one-line evidence])
+├─ L1b: [hypothesis name]  →  [CONFIRMED / RULED OUT / OPEN] ([one-line evidence])
+│   └─ L2a: [sub-hypothesis]  →  [CONFIRMED / RULED OUT] ([one-line evidence])
+│       └─ LEAF: [mechanism in one line]
+└─ L1c: [hypothesis name]  →  [RULED OUT] ([why])
+
+---
+
 ## L0 — Orient
 **mix_dominance:** [is_dominant value + what it means for this CE]
 **shapley:** [LP2S Xpp · S2C Xpp · C2O Xpp — primary step and share of ΔCVR]
 **trend_context:** [shape: sharp/gradual/recovery + pre_period_healthy + structural_delta_cvr]
-Branches opening at L1: [list each hypothesis as a one-liner]
 
 ## L1 — [descriptive label for this level's focus]
 ### [Hypothesis A name] · [Hypothesis B name] — parallel
+
 **[Hypothesis A]**
-Query: [what you tested and why this hypothesis]
+Query: [what you tested and why]
 Result: [key numbers — rates, counts, deltas]
-→ Opens L2: [sub-hypotheses if confirmed] | Closes: [what this rules out]
+→ CONFIRMED — opens L2: [sub-hypotheses] | Closes: [what this rules out]
 
 **[Hypothesis B]**
 Query: [...]
 Result: [...]
-→ Ruled out / Opens L2: [...]
+→ RULED OUT — [reason in one line]
 
 ## L2 — [descriptive label]
-### [Hypothesis C name] — targeted follow-up
-[same format]
+### [Hypothesis C name]
+
+**[Hypothesis C]**
+Query: [...]
+Result: [...]
+→ CONFIRMED — LEAF reached
 
 ## Root cause confirmed
 [One paragraph: the mechanism, the segment, the timing — fully stated.
-Every number in this paragraph must trace to a named query result above.]
+Every number here must trace to a named query result in the detail sections above.]
 ```
 
-If a branch produces nothing actionable, write that explicitly ("Ruled out —
-no concentration in device or language; uniform drop across all cuts") and stop
-that branch. Do not descend further unless the data gives you a reason to.
+**How to use the tree map:** Start it after L0 with all L1 branches marked
+`OPEN`. Update each entry to `CONFIRMED` or `RULED OUT` as results come in.
+Add child branches (`└─ L2a`) only when a parent confirms. When the leaf is
+reached, mark it `LEAF` and stop. Anyone reading the transcript sees the full
+investigation shape in the map before reading a single detail section.
+
+If a branch produces nothing actionable, mark it `RULED OUT` in the map and
+write one line in the detail section explaining why. Do not descend further.
 
 ---
 
