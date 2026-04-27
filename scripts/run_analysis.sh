@@ -30,7 +30,7 @@ POST_END="${5:-$(_date_offset 1)}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REFS_DIR="$SCRIPT_DIR/../references"
-OUTPUT_DIR="/tmp/cvr_rca_${CE_ID}"
+OUTPUT_DIR="/tmp/cvr_rca_${CE_ID}_${PRE_START}_${POST_END}"
 export OUTPUT_DIR
 
 mkdir -p "$OUTPUT_DIR"
@@ -120,3 +120,6 @@ echo "Windows  → pre: $PRE_START – $PRE_END  |  post: $POST_START – $POST_
 #                 computes POST_END=yesterday, POST_START=30d ago, PRE_END=31d ago,
 #                 PRE_START=61d ago when not supplied. Cross-platform _date_offset()
 #                 helper handles both BSD (macOS) and GNU (Linux) date.
+# c003 2026-04-27 Output directory now includes pre_start and post_end dates:
+#                 /tmp/cvr_rca_<ce_id>_<pre_start>_<post_end>/
+#                 Prevents multiple runs on the same CE from overwriting each other.

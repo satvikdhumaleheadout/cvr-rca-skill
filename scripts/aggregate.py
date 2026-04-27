@@ -19,15 +19,15 @@ Demoted stages (reference-only SQL templates, not auto-run):
 
 Usage:
   python aggregate.py
-    --stage0 /tmp/cvr_rca_167/stage0.json
-    --stage1 /tmp/cvr_rca_167/stage1.json
-    --stage3 /tmp/cvr_rca_167/stage3.json
-    --stage7 /tmp/cvr_rca_167/stage7.json
+    --stage0 /tmp/cvr_rca_167_2024-04-01_2024-04-14/stage0.json
+    --stage1 /tmp/cvr_rca_167_2024-04-01_2024-04-14/stage1.json
+    --stage3 /tmp/cvr_rca_167_2024-04-01_2024-04-14/stage3.json
+    --stage7 /tmp/cvr_rca_167_2024-04-01_2024-04-14/stage7.json
     --ce_id 167
     --pre_start 2024-04-01 --pre_end 2024-04-07
     --post_start 2024-04-08 --post_end 2024-04-14
     --primary_mbho HO
-    --output /tmp/cvr_rca_167/summary.json
+    --output /tmp/cvr_rca_167_2024-04-01_2024-04-14/summary.json
 """
 
 from __future__ import annotations

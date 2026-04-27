@@ -70,7 +70,7 @@ bash "$SKILL_DIR/scripts/run_analysis.sh" \
   <ce_id> <pre_start> <pre_end> <post_start> <post_end>
 ```
 
-This produces `summary.json` at `/tmp/cvr_rca_<ce_id>/summary.json`.
+This produces `summary.json` at `/tmp/cvr_rca_<ce_id>_<pre_start>_<post_end>/summary.json`.
 
 `summary.json` contains: CE metadata, headline funnel rates, Shapley, MB/HO +
 paid/non-paid mix, mix dominance, daily pre/post trend (`trend`), and the
@@ -297,7 +297,7 @@ Before writing HTML, write a structured findings summary. This is not a draft
 report — it is a short markdown file that forces every major claim to be made
 explicit and checked before it is committed to the report.
 
-Save to: `/tmp/cvr_rca_<ce_id>/findings.md`
+Save to: `/tmp/cvr_rca_<ce_id>_<pre_start>_<post_end>/findings.md`
 
 **Write the findings summary:**
 
@@ -352,7 +352,7 @@ Once all open items are resolved or explicitly accepted, proceed to Step 3.
 
 Follow `report_structure.md` exactly. Write from the solidified `findings.md` —
 the findings summary is the source of truth for every claim in the report.
-Write the output to: `/tmp/cvr_rca_<ce_id>/report.html`
+Write the output to: `/tmp/cvr_rca_<ce_id>_<pre_start>_<post_end>/report.html`
 
 For a concrete walkthrough of how an investigation unfolds end-to-end, see
 `references/worked_example.md`.
