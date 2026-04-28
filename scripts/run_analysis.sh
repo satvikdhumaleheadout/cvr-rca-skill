@@ -30,7 +30,7 @@ POST_END="${5:-$(_date_offset 1)}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REFS_DIR="$SCRIPT_DIR/../references"
-OUTPUT_DIR="/tmp/cvr_rca_${CE_ID}_${PRE_START}_${POST_END}"
+OUTPUT_DIR="${HOME}/Documents/RCA skill/Test Runs/ce${CE_ID}_${PRE_START}_${POST_END}"
 export OUTPUT_DIR
 
 mkdir -p "$OUTPUT_DIR"
@@ -123,3 +123,7 @@ echo "Windows  → pre: $PRE_START – $PRE_END  |  post: $POST_START – $POST_
 # c003 2026-04-27 Output directory now includes pre_start and post_end dates:
 #                 /tmp/cvr_rca_<ce_id>_<pre_start>_<post_end>/
 #                 Prevents multiple runs on the same CE from overwriting each other.
+# c004 2026-04-28 Output moved from /tmp to persistent run folder:
+#                 ~/Documents/RCA skill/Test Runs/ce<ce_id>_<pre_start>_<post_end>/
+#                 All outputs (summary.json, findings.md, report.html, transcript.md,
+#                 evaluation.md) now live together in one folder per run.

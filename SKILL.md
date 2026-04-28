@@ -70,7 +70,7 @@ bash "$SKILL_DIR/scripts/run_analysis.sh" \
   <ce_id> <pre_start> <pre_end> <post_start> <post_end>
 ```
 
-This produces `summary.json` at `/tmp/cvr_rca_<ce_id>_<pre_start>_<post_end>/summary.json`.
+This produces `summary.json` at `~/Documents/RCA\ skill/Test\ Runs/ce<ce_id>_<pre_start>_<post_end>/summary.json`.
 
 `summary.json` contains: CE metadata, headline funnel rates, Shapley, MB/HO +
 paid/non-paid mix, mix dominance, daily pre/post trend (`trend`), and the
@@ -122,13 +122,12 @@ everything that is already computed, open branches at L1, descend to a leaf.
 
 ### Start the investigation transcript
 
-Before reading the data, open the transcript file:
+Before reading the data, open the transcript file. The run directory was
+already created by the baseline script — write the transcript there:
 
 ```
-~/Documents/RCA\ skill/transcripts/ce<ce_id>_<post_start>.md
+~/Documents/RCA\ skill/Test\ Runs/ce<ce_id>_<pre_start>_<post_end>/transcript.md
 ```
-
-Create it if it doesn't exist (`mkdir -p ~/Documents/RCA\ skill/transcripts`).
 
 The transcript has two layers: a **tree map** at the top that shows the full
 branch structure at a glance, and **detail sections** below with query results.
@@ -297,7 +296,7 @@ Before writing HTML, write a structured findings summary. This is not a draft
 report — it is a short markdown file that forces every major claim to be made
 explicit and checked before it is committed to the report.
 
-Save to: `/tmp/cvr_rca_<ce_id>_<pre_start>_<post_end>/findings.md`
+Save to: `~/Documents/RCA\ skill/Test\ Runs/ce<ce_id>_<pre_start>_<post_end>/findings.md`
 
 **Write the findings summary:**
 
@@ -352,7 +351,7 @@ Once all open items are resolved or explicitly accepted, proceed to Step 3.
 
 Follow `report_structure.md` exactly. Write from the solidified `findings.md` —
 the findings summary is the source of truth for every claim in the report.
-Write the output to: `/tmp/cvr_rca_<ce_id>_<pre_start>_<post_end>/report.html`
+Write the output to: `~/Documents/RCA\ skill/Test\ Runs/ce<ce_id>_<pre_start>_<post_end>/report.html`
 
 For a concrete walkthrough of how an investigation unfolds end-to-end, see
 `references/worked_example.md`.
@@ -375,12 +374,10 @@ The rubric covers 7 themes. To evaluate, re-read:
 2. Your investigation transcript — what you looked at, why, what you decided
 3. The `summary.json` — to verify claims against actual numbers
 
-Score each theme 1–5. Write the evaluation to:
+Score each theme 1–5. Write the evaluation into the run folder:
 
 ```bash
-EVALS_DIR=~/Documents/RCA\ skill/evals
-mkdir -p "$EVALS_DIR"
-EVAL_FILE="$EVALS_DIR/ce<ce_id>_<post_start>.md"
+EVAL_FILE=~/Documents/RCA\ skill/Test\ Runs/ce<ce_id>_<pre_start>_<post_end>/evaluation.md
 ```
 
 **Evaluation file structure:**
@@ -418,10 +415,11 @@ Evaluation → [EVAL_FILE]
 
 Do not narrate the full evaluation in chat. The file is the record.
 
-Saved evaluations accumulate in `~/Documents/RCA skill/evals/`. They are the
-signal for improving the skill over time — not for patching individual reports.
+Each run folder in `~/Documents/RCA skill/Test Runs/` accumulates three files:
+`report.html`, `transcript.md`, and `evaluation.md`. Evaluations are the signal
+for improving the skill over time — not for patching individual reports.
 
-When the same improvement appears across multiple evals (e.g., session
+When the same improvement appears across multiple evaluations (e.g., session
 recordings consistently not pulled, seasonal events never quantified with a
 controlled comparison), that is a signal to update the skill files —
 `context.md`, `hypothesis.md`, or `SKILL.md` — so the investigation logic
