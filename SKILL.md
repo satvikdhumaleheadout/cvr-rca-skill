@@ -70,7 +70,12 @@ bash "$SKILL_DIR/scripts/run_analysis.sh" \
   <ce_id> <pre_start> <pre_end> <post_start> <post_end>
 ```
 
-This produces `summary.json` at `~/Documents/RCA\ skill/Test\ Runs/ce<ce_id>_<pre_start>_<post_end>/summary.json`.
+This produces `summary.json` inside a run folder under
+`~/Documents/RCA\ skill/Test\ Runs/`. The folder is named
+`ce<ce_id>_<pre_start>_<post_end>/`. If that folder already exists (a previous
+run on the same CE and dates), the script auto-increments: `_run2/`, `_run3/`,
+etc. The script prints the chosen folder name — call it `<run_dir>` for the
+rest of this document.
 
 `summary.json` contains: CE metadata, headline funnel rates, Shapley, MB/HO +
 paid/non-paid mix, mix dominance, daily pre/post trend (`trend`), and the
@@ -126,7 +131,7 @@ Before reading the data, open the transcript file. The run directory was
 already created by the baseline script — write the transcript there:
 
 ```
-~/Documents/RCA\ skill/Test\ Runs/ce<ce_id>_<pre_start>_<post_end>/transcript.md
+<run_dir>/transcript.md
 ```
 
 The transcript has two layers: a **tree map** at the top that shows the full
@@ -296,7 +301,7 @@ Before writing HTML, write a structured findings summary. This is not a draft
 report — it is a short markdown file that forces every major claim to be made
 explicit and checked before it is committed to the report.
 
-Save to: `~/Documents/RCA\ skill/Test\ Runs/ce<ce_id>_<pre_start>_<post_end>/findings.md`
+Save to: `<run_dir>/findings.md`
 
 **Write the findings summary:**
 
@@ -351,7 +356,7 @@ Once all open items are resolved or explicitly accepted, proceed to Step 3.
 
 Follow `report_structure.md` exactly. Write from the solidified `findings.md` —
 the findings summary is the source of truth for every claim in the report.
-Write the output to: `~/Documents/RCA\ skill/Test\ Runs/ce<ce_id>_<pre_start>_<post_end>/report.html`
+Write the output to: `<run_dir>/report.html`
 
 For a concrete walkthrough of how an investigation unfolds end-to-end, see
 `references/worked_example.md`.
@@ -377,7 +382,7 @@ The rubric covers 7 themes. To evaluate, re-read:
 Score each theme 1–5. Write the evaluation into the run folder:
 
 ```bash
-EVAL_FILE=~/Documents/RCA\ skill/Test\ Runs/ce<ce_id>_<pre_start>_<post_end>/evaluation.md
+EVAL_FILE=<run_dir>/evaluation.md
 ```
 
 **Evaluation file structure:**
@@ -453,4 +458,5 @@ catches it earlier next time, rather than adding more loops within the skill.
 | c009 | 2026-04-27 | Default window changed to 30/30 days. Dates are now optional in the invocation — when omitted, the script computes last 30 days as post and the prior 30 days as pre. |
 | c010 | 2026-04-27 | Added Step 2b — Synthesise findings and review. Claude writes a structured findings.md (root cause, mechanism, timing, evidence inventory, open items) before writing HTML. Open items — unverified claims, floating data points, unquantified recommendations — are resolved with follow-up queries or arithmetic before proceeding. Step 3 now writes from findings.md as the source of truth. Step 4 clarified as pure scoring; meta-review pattern documented for updating skill files across runs. |
 | c011 | 2026-04-27 | Evidence inventory gains a Source column — every claim with a number must name its source (summary.json field, BQ query result, or report table row). Added fourth specific check: any count or metric with no named source must be derived explicitly or removed before entering the report. Quick Reference block updated: date default changed from weekly Mon–Sun windows to 30/30 days (yesterday − 30 days as post, prior 30 days as pre), matching SKILL.md c009. |
+| c016 | 2026-04-28 | Run folder auto-increments when same CE + dates are re-run: base folder keeps no suffix, subsequent runs get _run2, _run3, etc. SKILL.md uses <run_dir> shorthand for all output paths. |
 | c012 | 2026-04-27 | Investigation model redesigned from sequential three-question gates to an investigation tree. L0 reads all three orientation signals simultaneously (mix_dominance, shapley, trend_context) then opens parallel L1 branches. Investigation descends level-by-level until a leaf (specific mechanism × segment × date). Transcript format mirrors the tree structure (L0 section, L1/L2 sections with parallel batch labels, Root cause confirmed paragraph). context.md gains "Investigation tree — L0 to L1 branch map" lookup table. worked_example.md rewritten with tree-format transcripts and parallel query batches explicit. |

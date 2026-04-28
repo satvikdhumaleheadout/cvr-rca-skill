@@ -30,7 +30,19 @@ POST_END="${5:-$(_date_offset 1)}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REFS_DIR="$SCRIPT_DIR/../references"
-OUTPUT_DIR="${HOME}/Documents/RCA skill/Test Runs/ce${CE_ID}_${PRE_START}_${POST_END}"
+
+# ── Output directory — auto-increment if folder already exists ─────────────
+_BASE_DIR="${HOME}/Documents/RCA skill/Test Runs/ce${CE_ID}_${PRE_START}_${POST_END}"
+if [ ! -d "$_BASE_DIR" ]; then
+  OUTPUT_DIR="$_BASE_DIR"
+else
+  _N=2
+  while [ -d "${_BASE_DIR}_run${_N}" ]; do
+    _N=$(( _N + 1 ))
+  done
+  OUTPUT_DIR="${_BASE_DIR}_run${_N}"
+  echo "Note: base folder already exists — writing to $(basename "$OUTPUT_DIR")"
+fi
 export OUTPUT_DIR
 
 mkdir -p "$OUTPUT_DIR"
