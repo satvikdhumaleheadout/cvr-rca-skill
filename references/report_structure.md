@@ -169,6 +169,7 @@ Do not show separate tables for dimensions that produced no signal. The ruled-ou
 | Analysis block opens with "The following table shows..." | Describes data, not the finding |
 | All dimension cuts present when none showed a concentrated signal | Template-driven, not story-driven |
 | Shapley visualization in a mix-dominant finding | The steps didn't break — showing it implies they did |
+| Table shows rates/shares with no user counts | Stakeholder can't judge if the finding is substantial — a 10pp drop on 30 users is noise |
 
 ---
 
@@ -526,11 +527,17 @@ Use a proportional flex bar — not a Plotly waterfall. Each segment's `flex` va
 
 ### Table with highlight rows
 
+**Raw user counts are mandatory in every table.** Any table that shows rates, shares, or percentages must also show the raw user count for that segment — either as a dedicated column or as a "Pre N / Post N" sub-label. A stakeholder reading a 12pp rate drop on a 40-user segment should be able to judge its significance immediately, without doing arithmetic. Never show shares or rates alone.
+
+The minimum columns for a rate table are: **Segment · Pre Users · Post Users · Pre Rate · Post Rate · Δ Rate**. When checkout or booking impact is the point (e.g. experience-level S2C), add a **Checkout Impact** column.
+
 ```html
 <table>
   <thead>
     <tr>
       <th>Segment</th>
+      <th class="num">Pre Users</th>  <!-- always include raw counts -->
+      <th class="num">Post Users</th>
       <th class="num">Pre S2C</th>
       <th class="num">Post S2C</th>
       <th class="num">Δ S2C</th>
@@ -539,12 +546,16 @@ Use a proportional flex bar — not a Plotly waterfall. Each segment's `flex` va
   <tbody>
     <tr class="highlight-row">   <!-- use highlight-row for the primary driver row -->
       <td><strong>HO</strong></td>
+      <td class="num">8,240</td>
+      <td class="num">9,980</td>
       <td class="num">35.7%</td>
       <td class="num">23.4%</td>
       <td class="num neg">−12.3pp</td>
     </tr>
     <tr>
       <td><strong>MB</strong></td>
+      <td class="num">41,600</td>
+      <td class="num">43,200</td>
       <td class="num">24.8%</td>
       <td class="num">24.2%</td>
       <td class="num">−0.6pp</td>
@@ -663,4 +674,5 @@ Plotly.newPlot('trend-90day', [
 | c001 | 2026-04-24 | Initial version — three-section report structure (Executive Summary → Actions → Supporting Analysis) extracted from SKILL.md Step 3 and formalized |
 | c002 | 2026-04-24 | Added Visual Spec section: shared CSS, page skeleton, component HTML patterns for all elements (metric cards, root cause callout, action cards, analysis blocks, Shapley bar, tables, Plotly conventions, ruled-out block). Derived from Keukenhof Tickets (CE 1549) reference report. render.py retired — Claude writes HTML directly using this spec. |
 | c003 | 2026-04-24 | Header 🔗 link is now a clickable `<a href>` pointing to `top_page_url` from summary.json (populated by Q0 — most-visited page URL in the post period). |
+| c005 | 2026-04-28 | Raw user counts mandatory in every table — any table showing rates or shares must include Pre Users and Post Users columns so stakeholders can judge volume without arithmetic. Added to table spec (with updated example), anti-patterns list, and report length calibration. |
 | c004 | 2026-04-28 | Three structural changes: (1) 90-day CVR trend chart moves from Section 3 to Section 1 — always shown after metric cards, before callout, so seasonal context is visible immediately. (2) Callout has a positive-CVR variant: green border, "CVR Improved — What's Driving It & What's Holding It Back" heading, questions reframed around drivers/headwinds rather than what broke. (3) 90-day chart x-axis fix: both current-year and LY lines now use currentDates on the x-axis (aligned by calendar position, not actual date), with tickformat '%b %Y' to show month labels. |
