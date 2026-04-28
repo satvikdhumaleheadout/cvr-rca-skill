@@ -22,31 +22,38 @@ Badge color: `delta-neg` (red) for drops, `delta-pos` (green) for gains, `delta-
 
 These cards are orientation, not conclusion. The conclusion comes in 1b.
 
-### 1b. Root cause callout (always)
+### 1b. 90-day CVR trend chart (always)
 
-One callout box — the most important element in the entire report. Red left border (`#e53935`). It answers three questions, each as a `.callout-item` with a `.q` label (uppercase grey, 11px) and an `.a` answer (15px, dark, 1–3 sentences).
+Place this immediately after the metric cards, before the callout. It gives the reader instant seasonal and structural context before they read the finding — whether CVR improved or declined, they can see the shape of the trend and the LY comparison at a glance.
 
-**What broke?**
-Name the specific thing that failed — not a metric name.
-- ❌ "LP2S declined"
-- ✅ "S2C fell from 25.6% to 24.2%, concentrated almost entirely in the HO segment — where S2C collapsed from 35.7% to 23.4% on 21% more select-page visitors"
+See the 90-day chart spec in the Plotly section below.
 
-**Why did it break?**
-The mechanism — what it means, not what the data shows.
-- ❌ "Possibly due to UX changes or pricing"
-- ✅ "Peak-season dates for late-April sold out. Users arrived at the date-picker and found their desired dates unavailable. Far-out bookings halved (−48%) while same-day surged (+43%), confirming peak dates are sold through"
+**Section 1 hard constraint:** no other charts or tables in this section — only the metric cards, the 90-day chart, and the callout.
 
-**When did it break?**
-Exact date (sudden) or window (gradual).
-- ❌ "In the post period"
-- ✅ "Gradual onset across Apr 13–19 — no single-day step change, consistent with progressive date availability sellout as each peak date filled up"
+### 1c. Root cause callout (always)
 
-**If multiple root causes confirmed:** callout names the primary cause (highest Shapley contribution). Secondary causes get action cards in Section 2.
+One callout box — the most important element in the entire report. It answers three questions, each as a `.callout-item` with a `.q` label (uppercase grey, 11px) and an `.a` answer (15px, dark, 1–3 sentences).
+
+**When CVR declined:** Red left border (`#e53935`), heading "Root Cause". Three questions:
+
+- **What broke?** Name the specific thing that failed — not just a metric name.
+  - ❌ "LP2S declined"
+  - ✅ "S2C fell from 25.6% to 24.2%, concentrated almost entirely in the HO segment — where S2C collapsed from 35.7% to 23.4% on 21% more select-page visitors"
+- **Why did it break?** The mechanism — what it means, not what the data shows.
+- **When did it break?** Exact date (sudden) or window (gradual).
+
+**When CVR improved:** Green left border (`#2e7d32`), heading "CVR Improved — What's Driving It & What's Holding It Back". Three questions:
+
+- **What drove the improvement?** Lead with the positive driver — which step improved, by how much, and the mechanism (seasonal uplift, paid mix growth, supply improvement, etc.). Include the structural delta vs LY: a large seasonal improvement with only +0.09pp structural delta reads very differently from +0.5pp structural gain.
+- **What's holding it back?** Name any step that declined despite overall CVR being up. Quantify both the rate drop and the checkout impact. If CVR improved across all steps, write "No significant headwinds — all funnel steps improved."
+- **When did the headwind emerge?** (or "When did improvement begin?" if no headwind). Timing classification as for the decline case.
+
+**If multiple root causes confirmed:** callout names the primary driver. Secondary findings get action cards in Section 2.
 
 **On uncertainty:** If the evidence strongly points to a mechanism but doesn't fully confirm it, say "consistent with X" — but still commit to the most actionable explanation. Do not hedge into "multiple possible factors."
 
 **Section 1 hard constraints:**
-- No charts, tables, or Shapley visualizations in this section
+- No tables or Shapley visualizations in this section (90-day chart is the only chart)
 - No hedging language ("possibly", "may be related to", "could be")
 
 ---
@@ -106,7 +113,6 @@ Include only analyses that directly support or rule out a claim made in Sections
 | Shapley decomposition | Always — establishes which funnel step drove ΔCVR and by how much. Use the proportional flex bar (see visual spec), not a Plotly waterfall. |
 | Mix analysis table | Always — confirms whether routing or conversion drove the drop. Neutral verdict if mix is ruled out. |
 | Daily S2C/LP2S/C2O trend chart | Always — establishes sudden vs gradual onset. Pre: blue `#6c8ebf`, Post: red `#c62828`. |
-| 90-day trend + LY overlay | When seasonal context is relevant — show `trend_context.series` with current (blue) and LY (grey dashed) overlaid, post window shaded. |
 | Dimension cut (device / language / page_type) | Only if it produced a concentrated signal OR is being explicitly ruled out. |
 | Channel/segment breakdown table | When the drop is concentrated in HO vs MB or a specific channel. |
 | Experience-level breakdown | When drop is concentrated in specific experiences. |
@@ -617,7 +623,36 @@ Plotly.newPlot('trend-chart', [
 }, { responsive: true });
 ```
 
-**90-day + LY overlay chart:** Use three traces — current year (blue solid), LY (grey dashed), with the post window shaded using a `rect` shape. The x-axis spans 90 days. Add a vertical reference line at post_start to visually mark where the pre period ends.
+**90-day + LY overlay chart:** Two traces — current year (blue solid) and LY (grey dashed) — both plotted against `currentDates` on the x-axis. Do NOT use actual LY calendar dates for the LY line; use the current-year date array so both lines sit at the same calendar position and are directly comparable month-over-month.
+
+X-axis: `tickformat: '%b %Y'`, `dtick: 'M1'` — shows "Jan 2026", "Feb 2026", etc.
+Post window: shade with a `rect` shape and a dashed vertical line at `post_start`. Use green (`rgba(46,125,50,0.05)`) for CVR improvement cases, red (`rgba(198,40,40,0.05)`) for CVR decline cases.
+
+```javascript
+// Both traces use currentDates — lyCvr values are plotted at the same seasonal position
+Plotly.newPlot('trend-90day', [
+  {type:'scatter', mode:'lines', name:'Current Year (2026)',
+   x: currentDates, y: currentCvr, line:{color:'#6c8ebf', width:2}},
+  {type:'scatter', mode:'lines', name:'Last Year (2025)',
+   x: currentDates, y: lyCvr, line:{color:'#9e9e9e', dash:'dash', width:1.5}}
+], {
+  height: 280,
+  yaxis: {tickformat:'.1%', title:'CVR'},
+  xaxis: {tickformat:'%b %Y', dtick:'M1', title:''},
+  plot_bgcolor:'#fff', paper_bgcolor:'#fff',
+  font: {family:'-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif', color:'#1a1a2e', size:11},
+  legend: {orientation:'h', y:-0.2},
+  margin: {l:55, r:20, t:30, b:60},
+  shapes: [
+    {type:'rect', x0:POST_START, x1:POST_END, y0:0, y1:1,
+     xref:'x', yref:'paper', fillcolor:'rgba(46,125,50,0.05)', line:{width:0}},
+    {type:'line', x0:POST_START, x1:POST_START, y0:0, y1:1,
+     xref:'x', yref:'paper', line:{color:'#2e7d32', dash:'dot', width:1}}
+  ],
+  annotations: [{x: midPostDate, y: chartMax, text:'Post period',
+    font:{color:'#2e7d32', size:10}, showarrow:false}]
+}, {responsive:true});
+```
 
 ---
 
@@ -628,3 +663,4 @@ Plotly.newPlot('trend-chart', [
 | c001 | 2026-04-24 | Initial version — three-section report structure (Executive Summary → Actions → Supporting Analysis) extracted from SKILL.md Step 3 and formalized |
 | c002 | 2026-04-24 | Added Visual Spec section: shared CSS, page skeleton, component HTML patterns for all elements (metric cards, root cause callout, action cards, analysis blocks, Shapley bar, tables, Plotly conventions, ruled-out block). Derived from Keukenhof Tickets (CE 1549) reference report. render.py retired — Claude writes HTML directly using this spec. |
 | c003 | 2026-04-24 | Header 🔗 link is now a clickable `<a href>` pointing to `top_page_url` from summary.json (populated by Q0 — most-visited page URL in the post period). |
+| c004 | 2026-04-28 | Three structural changes: (1) 90-day CVR trend chart moves from Section 3 to Section 1 — always shown after metric cards, before callout, so seasonal context is visible immediately. (2) Callout has a positive-CVR variant: green border, "CVR Improved — What's Driving It & What's Holding It Back" heading, questions reframed around drivers/headwinds rather than what broke. (3) 90-day chart x-axis fix: both current-year and LY lines now use currentDates on the x-axis (aligned by calendar position, not actual date), with tickformat '%b %Y' to show month labels. |
