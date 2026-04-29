@@ -177,6 +177,121 @@ fall even if all per-channel rates hold. That is a `channel_mix_dominant` case.
 
 ---
 
+## Mix Cascade — Fixing the Primary Segment
+
+Run this as the first L1 query batch in every investigation, before forming any
+funnel hypotheses. The cascade narrows traffic to the dominant segment in three
+levels; every subsequent query is filtered to that fixed segment.
+
+### Why fix a segment first
+
+Funnel rates (LP2S, S2C, C2O) computed on the full CE mix noisy signals from
+segments with very different base CVRs — organic SEO users, high-intent paid
+search users, and CRM users all behave differently. Fixing the primary segment
+first means your LP2S / S2C / C2O findings describe a homogeneous cohort, not
+an average across segments that converts at 2× different rates.
+
+### Level 1 — MB vs HO
+
+Already computed in `summary.json` (`mix.mb_share`, `mix.ho_share`). Read it
+directly — no custom query needed. Identify which brand has the larger user
+volume AND carries the larger absolute CVR impact (rate delta × post users).
+Fix `is_microbrand_page = TRUE` (MB) or `FALSE` (HO) for all downstream queries.
+
+### Level 2 — Paid vs organic within the fixed brand
+
+```sql
+SELECT
+  CASE
+    WHEN channel_name IN (
+      'Google Ads', 'Microsoft Ads', 'Facebook Ads (Meta)', 'Affiliates'
+    ) THEN 'Paid'
+    ELSE 'Organic'
+  END AS traffic_type,
+  CASE
+    WHEN event_date BETWEEN '{{PRE_START}}' AND '{{PRE_END}}' THEN 'pre'
+    ELSE 'post'
+  END AS period,
+  COUNT(DISTINCT user_id)                                                       AS users_lp,
+  SAFE_DIVIDE(COUNTIF(has_select_page_viewed), COUNT(DISTINCT user_id))        AS lp2s,
+  SAFE_DIVIDE(COUNTIF(has_checkout_started),   COUNTIF(has_select_page_viewed)) AS s2c,
+  SAFE_DIVIDE(COUNTIF(has_order_completed),    COUNTIF(has_checkout_started))   AS c2o,
+  SAFE_DIVIDE(COUNTIF(has_order_completed),    COUNT(DISTINCT user_id))         AS cvr
+FROM `headout-analytics.analytics_reporting.mixpanel_user_page_funnel_progression`
+WHERE combined_entity_id = '{{CE_ID}}'
+  AND event_date BETWEEN '{{PRE_START}}' AND '{{POST_END}}'
+  AND is_microbrand_page = {{IS_MB}}          -- fixed from Level 1
+GROUP BY 1, 2
+ORDER BY 1, 2
+```
+
+Fix `Paid` or `Organic` based on which carries the larger absolute checkout
+impact. If organic is primary, note it — organic drops typically point to SEO
+ranking changes or content quality, not product issues.
+
+### Level 3 — Channel breakdown within paid
+
+Only run if `Paid` was fixed in Level 2.
+
+```sql
+SELECT
+  channel_name,
+  CASE
+    WHEN event_date BETWEEN '{{PRE_START}}' AND '{{PRE_END}}' THEN 'pre'
+    ELSE 'post'
+  END AS period,
+  COUNT(DISTINCT user_id)                                                       AS users_lp,
+  SAFE_DIVIDE(COUNTIF(has_select_page_viewed), COUNT(DISTINCT user_id))        AS lp2s,
+  SAFE_DIVIDE(COUNTIF(has_checkout_started),   COUNTIF(has_select_page_viewed)) AS s2c,
+  SAFE_DIVIDE(COUNTIF(has_order_completed),    COUNTIF(has_checkout_started))   AS c2o,
+  SAFE_DIVIDE(COUNTIF(has_order_completed),    COUNT(DISTINCT user_id))         AS cvr
+FROM `headout-analytics.analytics_reporting.mixpanel_user_page_funnel_progression`
+WHERE combined_entity_id = '{{CE_ID}}'
+  AND event_date BETWEEN '{{PRE_START}}' AND '{{POST_END}}'
+  AND is_microbrand_page = {{IS_MB}}          -- fixed from Level 1
+  AND channel_name IN (
+    'Google Ads', 'Microsoft Ads', 'Facebook Ads (Meta)', 'Affiliates'
+  )                                           -- paid only, fixed from Level 2
+GROUP BY 1, 2
+ORDER BY 1, 2
+```
+
+Fix the channel with the largest absolute checkout impact. Exclude `Others` and
+`Direct` from the fix decision — they are catch-alls with mixed intent.
+
+### Decision rule for fixing
+
+Fix a level when **one segment has >15% of total post-period users AND its
+absolute checkout impact (|Δcvr| × post users) exceeds all other segments
+combined**. If the drop is evenly distributed across segments, do not fix at
+that level — log "distributed, no dominant segment" and carry all values forward.
+
+### Declaring the fixed segment
+
+After the cascade, declare the fixed segment explicitly in the transcript before
+writing any further hypotheses:
+
+```
+Fixed segment: MB · Paid · Google Ads
+Filter applied to all subsequent queries:
+  AND is_microbrand_page = TRUE
+  AND channel_name = 'Google Ads'
+```
+
+Every L1+ query after this point must carry these filters. Do not run funnel
+analysis on the full CE population after the segment is fixed.
+
+If the cascade stopped at Level 1 (e.g., organic is primary with no channel
+concentration), declare that too:
+
+```
+Fixed segment: MB · Organic (no channel concentration)
+Filter: AND is_microbrand_page = TRUE
+        AND channel_name NOT IN ('Google Ads','Microsoft Ads','Facebook Ads (Meta)','Affiliates')
+```
+
+---
+
 ## Data Source — The Funnel Table
 
 All funnel data comes from:
@@ -508,6 +623,109 @@ LEFT JOIN `headout-analytics.analytics_reporting.dim_experiences` AS de
 
 ---
 
+### `analytics_reporting.inventory_availability`
+
+**What it is:** Daily snapshots of inventory availability per tour and experience date. Use for S2C supply-side RCA — specifically to identify which lead-time windows had zero or depleted inventory in the post period.
+
+**Grain:** One row per `tour_id` × `experience_date` × `extracted_date`. Partitioned by `extracted_date`, clustered by `tour_id`.
+
+**Window:** 30-day rolling window — both `experience_date` and `extracted_date` are within 30 days of current date. For periods older than 30 days, use `analytics_intermediate.inventory_changes` instead (see below).
+
+**Key columns:**
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `tour_id` | STRING | Only join key. Bridge to `experience_id` via `dim_tours` (see lead-time bucket query below). |
+| `experience_date` | DATE | The date of the experience slot. |
+| `extracted_date` | DATE | The date this inventory was observed. Lead time = `DATE_DIFF(experience_date, extracted_date, DAY)`. |
+| `total_remaining` | INT64 | Total capacity remaining across all time slots for this date. 0 means fully sold out. |
+| `count_time_slots` | INT64 | Number of distinct time slots available for this date. |
+| `count_limited_time_slots` | INT64 | Slots with a finite capacity cap. |
+| `count_unlimited_time_slots` | INT64 | Slots with uncapped capacity. |
+
+**Join path to get from `combined_entity_id` → inventory:** `dim_experiences` has no `tour_id` column; `inventory_availability` has no `experience_id` column. The bridge is `dim_tours`, which carries both `tour_id` and `experience_id`. Always use the two-hop pattern: `dim_experiences (experience_id) → dim_tours (experience_id → tour_id) → inventory_availability (tour_id)`.
+
+**Lead-time bucket query — use when `count_days_available_30d` confirms a supply drop:**
+
+```sql
+-- Bridge: dim_experiences has no tour_id; inventory_availability has no experience_id.
+-- Use dim_tours (has both) as the two-hop bridge.
+WITH ce_tours AS (
+
+    SELECT DISTINCT dt.tour_id
+
+    FROM `headout-analytics.analytics_reporting.dim_experiences` AS de
+    INNER JOIN `headout-analytics.analytics_reporting.dim_tours` AS dt
+        USING (experience_id)
+
+    WHERE de.combined_entity_id = '<ce_id>'
+
+),
+
+inventory_by_lead_time AS (
+
+    SELECT
+        inv.tour_id,
+        inv.extracted_date,
+        inv.experience_date,
+        inv.total_remaining,
+        inv.count_time_slots,
+        DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) AS lead_time_days,
+        CASE
+            WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 0 AND 2   THEN '0-2d'
+            WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 3 AND 6   THEN '3-6d'
+            WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 7 AND 13  THEN '7-13d'
+            WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 14 AND 29 THEN '14-29d'
+            WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) >= 30             THEN '30d+'
+        END AS lead_time_bucket
+        -- Adapt bucket boundaries to the CE's booking horizon before running.
+        -- Same-day / short-horizon CEs (escape rooms, day tours): collapse to 0-1d / 2-4d / 5-7d / 8-14d / 14d+.
+        -- Long-horizon CEs (iconic landmarks, events): add a 45d+ or 60d+ bucket if 30d+ bookings are material.
+        -- A bucket that is empty in the pre period cannot produce a signal — remove or merge it.
+
+    FROM ce_tours
+    INNER JOIN `headout-analytics.analytics_reporting.inventory_availability` AS inv
+        USING (tour_id)
+
+    WHERE inv.extracted_date BETWEEN '<pre_start>' AND '<post_end>'
+
+)
+
+SELECT
+    lead_time_bucket,
+    extracted_date,
+    COUNT(DISTINCT experience_date)     AS count_dates_with_slots,
+    SUM(count_time_slots)               AS total_slots,
+    AVG(total_remaining)                AS avg_remaining,
+    COUNTIF(total_remaining = 0)        AS count_dates_zero_inventory,
+    COUNT(*)                            AS total_dates
+
+FROM inventory_by_lead_time
+
+GROUP BY 1, 2
+
+ORDER BY 2, 1
+```
+
+**Interpreting results:** Compare `count_dates_zero_inventory` and `avg_remaining` per `lead_time_bucket` across pre vs post `extracted_date` range. Two distinct patterns, each pointing to a different mechanism:
+
+- **One bucket spikes, others hold** → window-specific supply constraint. The data identifies *where* the problem is; it does not identify *why*. Do not assert a mechanism (allotment cut, bulk booking, cut-off setting, seasonal closure) without corroborating evidence — name the pattern and flag it for the supply team to investigate.
+- **All buckets decline roughly equally** → platform-wide or experience-wide supply reduction (product paused, vendor pulled all inventory, capacity cut across all dates). A window-specific explanation does not apply here.
+
+---
+
+### `analytics_intermediate.inventory_changes` (fallback for periods > 30 days ago)
+
+**What it is:** Transaction log of every inventory change event. Use when the post period falls outside `inventory_availability`'s 30-day rolling window.
+
+**Grain:** One row per inventory change event — `experience_date` × `updated_at` (timestamp of the change). History from 2020-01-01 onwards.
+
+**Key columns:** `tour_id`, `experience_date`, `updated_at`, `remaining` (INT64), `status`, `guest_type`.
+
+**Usage:** Same lead-time bucket logic as above — substitute `DATE(updated_at)` for `extracted_date` and filter on `experience_date` for the post period. Because this is a change log rather than a daily snapshot, aggregate to daily grain first (`MAX(remaining)` per `tour_id` × `experience_date` × `DATE(updated_at)`) before bucketing.
+
+---
+
 ## Query Principles
 
 These apply to every custom query written during an investigation.
@@ -619,6 +837,8 @@ times; if those users convert worse, S2C drops even if the product hasn't
 changed. Compare the pre/post lead time distribution for users who reached
 checkout (filter `has_checkout_started = TRUE`).
 
+The funnel table's `lead_time_days` is **demand-side** — it shows what lead times users actually booked at. This signal is ambiguous on its own: a shift toward longer lead times could mean users changed behaviour, or it could mean near-term inventory was empty and only far-out dates were available. Pair it with the supply-side `inventory_availability` lead-time bucket query to distinguish the two. Both demand and supply shifting together in the same lead-time window is the strongest confirmation of a supply scarcity root cause.
+
 ### `page_sub_type`
 
 Query for MB microsite traffic when a specific microsite page variant is
@@ -645,6 +865,8 @@ For S2C hypotheses, query `COUNT(DISTINCT user_id)` and S2C rate by
 `experience_id` + `event_date` to get `count_days_available_30d` per experience
 per day. A drop in available days that coincides with the S2C drop timing is a
 strong supply signal.
+
+When `count_days_available_30d` confirms a drop for one or more experiences, run the `inventory_availability` lead-time bucket query (see table schema above) to identify **which specific lead-time window** went empty. This converts a coarse "availability dropped" signal into a specific supply mechanism — e.g., "the 7–13 day window went to zero while near-term and far-future dates were unaffected" points to vendor allotment cut or bulk booking consumption in that window, not a platform-wide supply issue.
 
 ---
 
@@ -716,8 +938,14 @@ Angles worth querying:
   experiences points to a supply or pricing issue specific to those products
 - `count_days_available_30d` from `product_rankings_features` per experience —
   a meaningful drop in available days correlates with S2C drops
-- `lead_time_days` distribution — did the post period skew toward shorter lead
-  times (less available inventory near-term)?
+- When `count_days_available_30d` drops for a specific experience, run the
+  `inventory_availability` lead-time bucket query to pinpoint which window went
+  empty — this is the supply-side confirmation step that converts "availability
+  dropped" into a specific mechanism and DRI
+- `lead_time_days` distribution — did the post period skew toward longer lead
+  times? Cross-check with the supply-side bucket query: if the same window is
+  empty in `inventory_availability`, the lead-time shift is supply-caused, not
+  behavioural
 - If broad across experiences and sudden in trend: think checkout flow or
   availability configuration change rather than a per-experience supply issue
 
@@ -763,3 +991,7 @@ thinking and makes the inference scannable.
 | c001 | 2026-04-24 | Initial version — Headout business context, CE definition, MB/HO, funnel steps, dimensions, channels, table schemas |
 | c002 | 2026-04-27 | Added Query Principles (majority-contributor, rate×volume), Q3 Trend Interpretation guide, Dimensions to Query and When, Common Investigation Patterns per funnel step, Session Recordings guidance. All moved from SKILL.md as part of process/domain separation. |
 | c003 | 2026-04-27 | Added "Investigation tree — L0 to L1 branch map" section — lookup table mapping L0 signal combinations to default L1 branch sets. |
+| c004 | 2026-04-28 | Added `inventory_availability` and `inventory_changes` table schemas; updated `lead_time_days` dimension, experience-level availability proxy, and S2C investigation pattern to include lead-time bucket query for supply-side root cause pinpointing. |
+| c005 | 2026-04-28 | Generalised lead-time bucket query: bucket boundaries now carry inline guidance to adapt to the CE's booking horizon; interpreting results section now covers both window-specific and uniform-decline patterns separately, with explicit instruction not to assert a mechanism without corroborating evidence. |
+| c006 | 2026-04-29 | Added "Mix Cascade — Fixing the Primary Segment" section: full three-level cascade (Level 1 MB/HO from summary.json, Level 2 Paid/Organic custom BQ query, Level 3 Channel breakdown within Paid). Includes decision rule for when to fix a level, fixed segment declaration template, and filter strings to carry into all subsequent L2+ queries. |
+| c006 | 2026-04-28 | Fixed critical join-path bug in `inventory_availability` schema: removed non-existent `experience_id` column; corrected `tour_id` note to reference `dim_tours` as the bridge. Fixed lead-time bucket query: replaced `ce_experiences` CTE (which incorrectly selected `tour_id` from `dim_experiences`) with `ce_tours` CTE using the correct two-hop join `dim_experiences → dim_tours → inventory_availability`. |

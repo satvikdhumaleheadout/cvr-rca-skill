@@ -241,18 +241,44 @@ See `context.md` → "Q3 Trend Interpretation" for full interpretation guide.
 
 ---
 
-### L1+ — Branch and descend
+### L1 — Mix cascade (always first, before any funnel hypotheses)
 
-After L0, write 2–4 specific, falsifiable hypotheses. These are the L1
-branches. A hypothesis must name a mechanism, a segment or experience, and the
+Before forming any hypothesis about LP2S / S2C / C2O, run the mix cascade to
+fix the primary segment. This is mandatory — running funnel analysis on the
+full CE mixes cohorts with very different base CVRs and produces noisy findings.
+
+**Step 1 — MB vs HO:** Read from `summary.json` (no query needed).
+**Step 2 — Paid vs organic within primary brand:** Run Level 2 query.
+**Step 3 — Channel breakdown within paid:** Run Level 3 query (if paid is primary).
+
+Full query templates and the decision rule for fixing each level are in
+`context.md` → "Mix Cascade — Fixing the Primary Segment".
+
+Once the cascade is done, declare the fixed segment in the transcript:
+
+```
+Fixed segment: [MB/HO] · [Paid/Organic] · [channel if applicable]
+Filters for all subsequent queries: AND is_microbrand_page = ... AND channel_name = ...
+```
+
+Log the cascade in the tree map as its own L1 batch, then add the fixed segment
+declaration as a persistent note before L2 branches open.
+
+### L2+ — Branch and descend (all queries filtered to fixed segment)
+
+After the segment is fixed, write 2–4 specific, falsifiable hypotheses about
+the funnel step identified in L0 (shapley). These are the L2 branches. Every
+query from this point carries the fixed segment filters.
+
+A hypothesis must name a mechanism, a segment or experience, and the
 pattern you would expect if it were true:
 
 - *Observation* (wrong): "S2C dropped on mobile"
 - *Hypothesis* (right): "The Apr 8 mobile deploy broke date-picker rendering
   on iOS, causing users to see no available slots and abandon the select page"
 
-Run all L1 hypotheses in parallel — one query batch, results read together.
-Consult `hypothesis.md` for historical priors when forming L1 hypotheses.
+Run all hypotheses within a level in parallel — one query batch, results read
+together. Consult `hypothesis.md` for historical priors when forming hypotheses.
 
 Each result either:
 - **Confirms** → open a L2 branch that tests the mechanism more specifically
@@ -460,3 +486,4 @@ catches it earlier next time, rather than adding more loops within the skill.
 | c011 | 2026-04-27 | Evidence inventory gains a Source column — every claim with a number must name its source (summary.json field, BQ query result, or report table row). Added fourth specific check: any count or metric with no named source must be derived explicitly or removed before entering the report. Quick Reference block updated: date default changed from weekly Mon–Sun windows to 30/30 days (yesterday − 30 days as post, prior 30 days as pre), matching SKILL.md c009. |
 | c016 | 2026-04-28 | Run folder auto-increments when same CE + dates are re-run: base folder keeps no suffix, subsequent runs get _run2, _run3, etc. SKILL.md uses <run_dir> shorthand for all output paths. |
 | c012 | 2026-04-27 | Investigation model redesigned from sequential three-question gates to an investigation tree. L0 reads all three orientation signals simultaneously (mix_dominance, shapley, trend_context) then opens parallel L1 branches. Investigation descends level-by-level until a leaf (specific mechanism × segment × date). Transcript format mirrors the tree structure (L0 section, L1/L2 sections with parallel batch labels, Root cause confirmed paragraph). context.md gains "Investigation tree — L0 to L1 branch map" lookup table. worked_example.md rewritten with tree-format transcripts and parallel query batches explicit. |
+| c017 | 2026-04-29 | Mix cascade redesigned as mandatory L1 step: three levels (MB/HO → Paid/Organic → Channel within Paid). Fixed segment declared from cascade results; all L2+ funnel queries carry the fixed segment filters. L1 and L2+ steps renamed in Step 2 accordingly. context.md gains full Mix Cascade section with three query templates, decision rule, and fixed segment declaration template. report_structure.md gains Fixed Segment banner HTML spec and updated 90-day chart spec (weekly ticks + LY data guard). |

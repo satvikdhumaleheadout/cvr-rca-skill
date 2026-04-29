@@ -111,16 +111,76 @@ Include only analyses that directly support or rule out a claim made in Sections
 | Analysis | When to include |
 |---|---|
 | Shapley decomposition | Always — establishes which funnel step drove ΔCVR and by how much. Use the proportional flex bar (see visual spec), not a Plotly waterfall. |
-| Mix analysis table | Always — confirms whether routing or conversion drove the drop. Neutral verdict if mix is ruled out. |
-| Daily S2C/LP2S/C2O trend chart | Always — establishes sudden vs gradual onset. Pre: blue `#6c8ebf`, Post: red `#c62828`. |
+| Mix cascade (three levels) | Always — MB/HO → paid/organic → channel breakdown. Opens with a Fixed Segment banner declaring the filters applied to all subsequent analysis. See Fixed Segment banner spec below. |
+| Daily S2C/LP2S/C2O trend chart | Always — establishes sudden vs gradual onset. All trend charts filtered to the fixed segment. Pre: blue `#6c8ebf`, Post: red `#c62828`. |
 | Dimension cut (device / language / page_type) | Only if it produced a concentrated signal OR is being explicitly ruled out. |
 | Channel/segment breakdown table | When the drop is concentrated in HO vs MB or a specific channel. |
 | Experience-level breakdown | When drop is concentrated in specific experiences. |
 | URL-level breakdown | When drop is concentrated in specific page URLs. |
 | Lead-time distribution | When availability scarcity is the hypothesis — compare pre/post booking bucket distribution. |
 | Availability proxy table | When S2C hypothesis involves inventory — `count_days_available_30d` and `days_to_first_available_date` per experience. |
+| Inventory lead-time bucket table | When the availability proxy confirmed a drop for a specific experience — shows which lead-time window went empty. Present as a pre/post comparison by bucket. Always follows the availability proxy table; never shown without it. |
 | Price analysis | When price changed and timing correlates with LP2S onset. |
 | Session recordings | When recordings were pulled — present as a structured table (see below). |
+
+### Inventory lead-time bucket table format
+
+Present as a `.analysis-block` immediately after the availability proxy table, within the same S2C evidence section. The verdict line names the specific window that went empty, not just "availability dropped".
+
+**Two patterns, two verdict forms — use the one the data actually shows:**
+
+- **Window-specific spike** (one bucket's `count_dates_zero_inventory` rises sharply, others hold):
+  - ✅ "The 7–13 day window lost available dates for Experience 8821 in the post period — near-term and far-future buckets unaffected. Points to a window-specific supply constraint."
+  - Highlight the spiked bucket(s) with `.highlight-row`.
+
+- **Uniform decline** (all or most buckets declined together):
+  - ✅ "Available inventory fell across all lead-time windows for Experience 8821 — no single window is uniquely affected. Consistent with a platform-wide or full-product supply reduction."
+  - No `.highlight-row` — the finding is CE-wide, not bucket-specific.
+
+- ❌ "The following table shows availability by lead time." (describes the data, not the finding)
+
+**Table structure:** One row per lead-time bucket. Columns: Bucket · Pre dates with slots · Post dates with slots · Pre avg remaining · Post avg remaining · Pre zero-inventory dates · Post zero-inventory dates. Only include buckets that had meaningful activity in the pre period — empty pre-period buckets produce no signal and should be dropped.
+
+**Subtext paragraph:** Describe the pattern the data shows and what it implies for the supply team to investigate. Do not assert a specific mechanism (allotment cut, bulk booking, cut-off setting) unless corroborating evidence from the investigation supports it — the table identifies *where* inventory collapsed, not *why*. The subtext should read: "The [window] collapse suggests a window-specific constraint — supply team should check [what to look at]", not "this was caused by X".
+
+```html
+<!-- Buckets shown here are illustrative — adapt to the CE's actual booking horizon.
+     Drop any bucket that was empty in the pre period (no signal = no row).
+     Remove highlight-row if the pattern is uniform across all buckets. -->
+<div class="analysis-block">
+  <div class="block-title">Inventory availability by lead-time bucket — [Experience name]</div>
+  <div class="verdict-line">[State the actual pattern: window-specific spike OR uniform decline — use the correct verdict form from the spec above]</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Lead-time bucket</th>
+        <th class="num">Pre: dates w/ slots</th>
+        <th class="num">Post: dates w/ slots</th>
+        <th class="num">Pre: avg remaining</th>
+        <th class="num">Post: avg remaining</th>
+        <th class="num">Pre: zero-inv dates</th>
+        <th class="num">Post: zero-inv dates</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- One row per bucket from actual query results. highlight-row on bucket(s)
+           that spiked (window-specific case only). -->
+      <tr>
+        <td>[bucket]</td>
+        <td class="num">[n]</td><td class="num">[n]</td>
+        <td class="num">[n]</td><td class="num">[n]</td>
+        <td class="num">[n]</td><td class="num">[n]</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p style="font-size:13px;color:#555;margin-top:12px;">
+    [Describe the pattern and what it tells the supply team to investigate.
+     Do not assert a mechanism — the table shows where inventory collapsed, not why.]
+  </p>
+</div>
+```
 
 ### Session recordings format
 
@@ -498,6 +558,27 @@ Do not show separate tables for dimensions that produced no signal. The ruled-ou
 
 ---
 
+### Fixed Segment banner
+
+After the mix cascade concludes, declare the fixed segment once at the top of the analysis section — before the Shapley block. This banner tells the reader that all funnel data below is scoped to one coherent cohort.
+
+```html
+<div style="background:#e8f5e9;border-left:4px solid #2e7d32;border-radius:4px;padding:10px 14px;margin-bottom:20px;font-size:13px;color:#1b5e20;">
+  <strong>Fixed segment for all funnel analysis:</strong>
+  [MB / HO] · [Paid / Organic] · [Channel if applicable — e.g. "Google Ads"]<br>
+  <span style="color:#555;font-size:12px;">
+    Post-period users: [N] &nbsp;|&nbsp; Share of CE post traffic: [X]%
+    &nbsp;|&nbsp; Checkout impact: [sign][N] vs pre period
+  </span>
+</div>
+```
+
+The banner should appear once, immediately after the mix cascade analysis block and before the Shapley decomposition block. Do not repeat it in every analysis block — subsequent blocks inherit the scope implicitly.
+
+If the mix cascade could not fix a single segment (e.g. the signal is evenly split across MB and HO), omit the banner and note in the first analysis block's verdict line that the funnel analysis covers the full CE.
+
+---
+
 ### Shapley decomposition block
 
 Use a proportional flex bar — not a Plotly waterfall. Each segment's `flex` value equals its percentage contribution.
@@ -636,20 +717,42 @@ Plotly.newPlot('trend-chart', [
 
 **90-day + LY overlay chart:** Two traces — current year (blue solid) and LY (grey dashed) — both plotted against `currentDates` on the x-axis. Do NOT use actual LY calendar dates for the LY line; use the current-year date array so both lines sit at the same calendar position and are directly comparable month-over-month.
 
-X-axis: `tickformat: '%b %Y'`, `dtick: 'M1'` — shows "Jan 2026", "Feb 2026", etc.
+**LY data guard (mandatory):** Before rendering, check that `lyCvr` is a non-empty array with at least one non-null value. If LY data is missing or all-null, show a warning banner instead of the chart:
+```html
+<div style="background:#fff3e0;border-left:4px solid #e65100;padding:8px 12px;font-size:12px;color:#bf360c;margin-bottom:8px;">
+  ⚠️ Last-year overlay unavailable — LY CVR series is absent from summary.json.
+  Chart shows current period only.
+</div>
+```
+
+X-axis: `tickformat: '%d %b'`, `dtick: 7 * 86400000` (weekly ticks in milliseconds) — shows "01 Jan", "08 Jan", etc., giving week-level resolution across the 90-day window.
+
 Post window: shade with a `rect` shape and a dashed vertical line at `post_start`. Use green (`rgba(46,125,50,0.05)`) for CVR improvement cases, red (`rgba(198,40,40,0.05)`) for CVR decline cases.
 
 ```javascript
+// LY data guard — check before building traces
+const hasLyData = Array.isArray(lyCvr) && lyCvr.some(v => v !== null && v !== undefined);
+if (!hasLyData) {
+  document.getElementById('trend-90day').innerHTML =
+    '<div style="background:#fff3e0;border-left:4px solid #e65100;padding:8px 12px;font-size:12px;color:#bf360c;">' +
+    '⚠️ Last-year overlay unavailable — LY CVR series is absent from summary.json. Chart shows current period only.</div>';
+}
+
 // Both traces use currentDates — lyCvr values are plotted at the same seasonal position
-Plotly.newPlot('trend-90day', [
+const traces90d = [
   {type:'scatter', mode:'lines', name:'Current Year (2026)',
-   x: currentDates, y: currentCvr, line:{color:'#6c8ebf', width:2}},
-  {type:'scatter', mode:'lines', name:'Last Year (2025)',
-   x: currentDates, y: lyCvr, line:{color:'#9e9e9e', dash:'dash', width:1.5}}
-], {
+   x: currentDates, y: currentCvr, line:{color:'#6c8ebf', width:2}}
+];
+if (hasLyData) {
+  traces90d.push(
+    {type:'scatter', mode:'lines', name:'Last Year (2025)',
+     x: currentDates, y: lyCvr, line:{color:'#9e9e9e', dash:'dash', width:1.5}}
+  );
+}
+Plotly.newPlot('trend-90day', traces90d, {
   height: 280,
   yaxis: {tickformat:'.1%', title:'CVR'},
-  xaxis: {tickformat:'%b %Y', dtick:'M1', title:''},
+  xaxis: {tickformat:'%d %b', dtick: 7 * 86400000, title:''},
   plot_bgcolor:'#fff', paper_bgcolor:'#fff',
   font: {family:'-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif', color:'#1a1a2e', size:11},
   legend: {orientation:'h', y:-0.2},
@@ -676,3 +779,6 @@ Plotly.newPlot('trend-90day', [
 | c003 | 2026-04-24 | Header 🔗 link is now a clickable `<a href>` pointing to `top_page_url` from summary.json (populated by Q0 — most-visited page URL in the post period). |
 | c005 | 2026-04-28 | Raw user counts mandatory in every table — any table showing rates or shares must include Pre Users and Post Users columns so stakeholders can judge volume without arithmetic. Added to table spec (with updated example), anti-patterns list, and report length calibration. |
 | c004 | 2026-04-28 | Three structural changes: (1) 90-day CVR trend chart moves from Section 3 to Section 1 — always shown after metric cards, before callout, so seasonal context is visible immediately. (2) Callout has a positive-CVR variant: green border, "CVR Improved — What's Driving It & What's Holding It Back" heading, questions reframed around drivers/headwinds rather than what broke. (3) 90-day chart x-axis fix: both current-year and LY lines now use currentDates on the x-axis (aligned by calendar position, not actual date), with tickformat '%b %Y' to show month labels. |
+| c006 | 2026-04-28 | Added inventory lead-time bucket table to Section 3 — new row in "What belongs in Section 3" table and a dedicated format spec with HTML pattern. Always follows the availability proxy table; verdict line names the specific window that went empty, not just "availability dropped". |
+| c007 | 2026-04-28 | Generalised lead-time bucket spec: two verdict forms (window-specific spike vs uniform decline); HTML pattern replaced specific example rows with placeholders and a note to adapt buckets to the CE's booking horizon; subtext guidance changed from "state the mechanism" to "describe the pattern and what to investigate" to prevent asserting unconfirmed causes. |
+| c008 | 2026-04-29 | (1) Fixed Segment banner: new HTML component rendered once after the mix cascade and before the Shapley block, declaring the fixed MB/HO × Paid/Organic × Channel scope that applies to all subsequent funnel analysis. Includes fallback note if segment cannot be fixed. (2) 90-day chart x-axis changed from monthly (`dtick:'M1'`) to weekly ticks (`dtick: 7*86400000`, `tickformat:'%d %b'`) for week-level resolution across the 90-day window. (3) LY data guard added: pre-render check for non-empty lyCvr array; shows ⚠️ warning banner instead of silent missing line if LY series is absent from summary.json. (4) "What belongs in Section 3" updated: mix analysis now explicitly "Mix cascade (three levels: MB/HO → Paid/Organic → Channel)" replacing the single mix table entry. |
