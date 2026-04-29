@@ -266,48 +266,49 @@ declaration as a persistent note before L2 branches open.
 
 ### L2+ — Branch and descend (all queries filtered to fixed segment)
 
-After the segment is fixed, write 2–4 specific, falsifiable hypotheses about
-the funnel step identified in L0 (shapley). These are the L2 branches. Every
-query from this point carries the fixed segment filters.
+With the segment fixed and the primary funnel step identified from Shapley,
+open L2 branches. Each branch is a specific, falsifiable hypothesis about why
+that funnel step dropped in the fixed segment. Every query from this point
+carries the fixed segment filters.
 
-A hypothesis must name a mechanism, a segment or experience, and the
-pattern you would expect if it were true:
+A branch is a hypothesis, not an observation. Name the mechanism, the segment
+or experience, and the pattern you would expect if it were true:
 
 - *Observation* (wrong): "S2C dropped on mobile"
 - *Hypothesis* (right): "The Apr 8 mobile deploy broke date-picker rendering
   on iOS, causing users to see no available slots and abandon the select page"
 
-**Where hypotheses come from:** The investigation patterns in `context.md` are
-the default starting set for each funnel step — not an exhaustive list. Use
-them to open the first batch. After each batch, read the results and ask: *does
-this data suggest a mechanism or segment that isn't on the default list?* If
-yes, that becomes the next hypothesis. The hypothesis list is self-extending —
-it grows from what the data shows, not from what the list says. A surprising
-result, a partial explanation, or a number that doesn't fit the current story
-are all signals to form a new hypothesis. Consult `hypothesis.md` for
-historical priors, but don't treat either list as a ceiling.
+**Where branches come from:** Open the first set of branches using the
+investigation patterns in `context.md` for the primary funnel step — those
+patterns are the default starting set. Run the first set in parallel, then read
+the results. Each result either opens a new branch, closes one, or concentrates
+the investigation — and what the data shows determines what the next branches
+are. The branches are not written upfront as a fixed list; they grow level by
+level from what the data actually shows. Consult `hypothesis.md` for historical
+priors, but don't treat any list as a ceiling.
 
-Run all hypotheses within a level in parallel — one query batch, results read
+Run all branches within a level in parallel — one query batch, results read
 together.
 
 Each result either:
-- **Confirms** → descend to the next level with a hypothesis that tests the
-  mechanism more specifically — write that hypothesis from what you just saw,
-  not from a template
-- **Rules out** → close that branch, state why in one line, do not revisit
-- **Concentrates** → the dimension or experience showing the largest impact
-  becomes the anchor; form an L2 hypothesis about *why* it concentrated —
-  what mechanism would explain that specific segment being affected?
-- **Surprises** → something unexpected appeared (a dimension you didn't test,
-  a number inconsistent with the story so far) — form a new hypothesis and add
-  a branch, even if it wasn't in the default set
+- **Confirms** → descend: open a child branch that tests the mechanism more
+  specifically — write that branch from what you just saw, not from a template
+- **Rules out** → close the branch, state why in one line, do not revisit
+- **Concentrates** → the segment or experience with the largest impact becomes
+  the anchor; the next branch asks *why* it concentrated — what mechanism
+  explains that specific segment being affected?
+- **Surprises** → something unexpected appeared (an unexplained number, a
+  pattern inconsistent with the story so far) — open a new branch to test it,
+  even if it wasn't in the default set
 
 Continue descending (L2, L3 if needed) until you reach a leaf: a specific
-mechanism at a specific segment/experience/URL/date that fully explains the rate
-and volume impact. The investigation is complete when you reach the leaf — not
-when the default list is exhausted. If the list runs out and no leaf is reached,
-that is a signal to look harder, not to stop. Queries at each level are written
-from scratch — full table schemas and column definitions are in `context.md`.
+mechanism at a specific segment/experience/URL/date that fully explains both
+the rate delta and the volume impact. The investigation is complete when you
+reach the leaf — not when the starting pattern list is exhausted. If you've
+run the default patterns and have no leaf, that is a signal to look harder —
+at cross-cuts not yet tested, finer grain not yet drilled, or tables beyond
+the funnel table. Queries at each level are written from scratch — full table
+schemas and column definitions are in `context.md`.
 
 Run queries with:
 ```bash
@@ -506,3 +507,4 @@ catches it earlier next time, rather than adding more loops within the skill.
 | c012 | 2026-04-27 | Investigation model redesigned from sequential three-question gates to an investigation tree. L0 reads all three orientation signals simultaneously (mix_dominance, shapley, trend_context) then opens parallel L1 branches. Investigation descends level-by-level until a leaf (specific mechanism × segment × date). Transcript format mirrors the tree structure (L0 section, L1/L2 sections with parallel batch labels, Root cause confirmed paragraph). context.md gains "Investigation tree — L0 to L1 branch map" lookup table. worked_example.md rewritten with tree-format transcripts and parallel query batches explicit. |
 | c017 | 2026-04-29 | Mix cascade redesigned as mandatory L1 step: three levels (MB/HO → Paid/Organic → Channel within Paid). Fixed segment declared from cascade results; all L2+ funnel queries carry the fixed segment filters. L1 and L2+ steps renamed in Step 2 accordingly. context.md gains full Mix Cascade section with three query templates, decision rule, and fixed segment declaration template. report_structure.md gains Fixed Segment banner HTML spec and updated 90-day chart spec (weekly ticks + LY data guard). |
 | c018 | 2026-04-29 | L2+ section rewritten to make hypothesis generation self-extending: context.md patterns are explicitly the default *starting set*, not an exhaustive list. Results themselves generate the next hypothesis. Four result types defined: Confirms, Rules out, Concentrates, and Surprises (the last being new — an unexpected result generates a new branch even if not on the default list). "Investigation ends at the leaf, not at list exhaustion" stated explicitly. context.md Common Investigation Patterns header rewritten to match — replaces weak "not rails" disclaimer with explicit loop logic and three common reasons a list runs out before a leaf is reached. |
+| c019 | 2026-04-29 | Removed "write 2–4 specific, falsifiable hypotheses" from L2+ — this was a leftover artifact from the old Q1/Q2/Q3 model that contradicted the tree structure. L2+ now opens branches from the context.md default set and grows them level-by-level from what the data shows. Branches are not a fixed upfront list. |
