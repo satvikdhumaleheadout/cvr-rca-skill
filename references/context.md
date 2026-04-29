@@ -880,7 +880,7 @@ then adapt based on what the data actually shows.
 |-----------|----------------|---------------------|
 | `mix_dominance.is_dominant = true` | Routing story | (a) Which MB/HO segment or channel drove the shift? (b) Which specific URLs or channels gained/lost volume? |
 | Shapley: LP2S dominates | LP2S is the funnel story | (a) Device × LP2S — mobile-concentrated? (b) Page type × LP2S — Collection vs Experience? (c) Price change for top experiences? (d) Specific URL-level traffic loss? |
-| Shapley: S2C dominates | S2C is the funnel story | (a) Experience-level S2C + availability proxy (count_days_available_30d)? (b) Lead time distribution shift? (c) MB vs HO S2C split — concentrated in one segment? |
+| Shapley: S2C dominates | S2C is the funnel story | (a) Language × S2C — one language concentrated? (b) Device × S2C — mobile select-page issue? (c) Experience-level S2C + availability proxy (count_days_available_30d)? (d) Lead time distribution shift? (e) MB vs HO S2C split — concentrated in one segment? |
 | Shapley: C2O dominates | C2O is the funnel story | (a) C2A vs A2O sub-decomposition (which sub-metric moved)? (b) Channel × C2O — paid vs organic? (c) Device × C2O — mobile checkout friction? |
 | Trend: sharp break on date X | Event on date X | (a) What dimension shows the largest rate change anchored to that date? (b) Paid campaign change? Deploy? Supply configuration? |
 | Trend: gradual erosion | Compounding trend | (a) Supply trend (availability proxy over time)? (b) Pricing trend? (c) Traffic quality trend (channel mix shift)? |
@@ -912,55 +912,101 @@ finding. Marketing owns it.
 ### If LP2S is the primary driver
 
 LP2S is about whether users landing on the listing page click through to the
-select page. Start with the trend shape (Question 3), then form hypotheses.
+select page. Work through three tiers in order — don't skip ahead.
 
-Angles worth querying:
+**Tier 1 — Run dimension cuts in parallel (first batch):**
 - `device_type` × LP2S rate pre/post — mobile-concentrated drops point to a
   UI or performance change
 - `language` × LP2S rate — a single language dropping points to geo-specific
   pricing or a localised UX issue
 - `page_type` × LP2S rate — a drop in Collection but not Experience pages points
   to browse-level friction
-- `final_price_usd` from `product_rankings_features` pre vs post for top
-  experiences — did prices increase, and does the timing coincide with LP2S drop?
-- `page_url` level — which specific pages drove the drop? A drop concentrated
-  on 2–3 URLs is more actionable than a broad CE-wide decline
+- `experience_id` × LP2S rate — a drop in a few specific experiences points to
+  listing quality, price, or availability visible on the listing
 
-When a dimension shows a concentrated signal, run the cross-cut to confirm the
-intersection, then drill to URL-level within that segment.
+**If a dimension concentrates:** run the intersection (e.g., French × mobile), then drill to `page_url` within that segment. The page URL is the target output — it is what the stakeholder needs to act on. A finding is not complete until you can say "these specific URLs are where LP2S dropped, here are the user counts."
+
+**Tier 2 — If no dimension concentrates (drop is CE-wide and flat across cuts):**
+Run pricing analysis — `final_price_usd` from `product_rankings_features` pre vs post for top experiences. Did prices increase, and does the timing align with the LP2S drop? A CE-wide price uplift will depress LP2S broadly with no dimension cut showing concentration.
+
+**Tier 3 — If pricing is also flat:**
+The drop is broad, no pricing explanation, no concentrated locus. Session recordings are the next tool — look for a UX pattern that affects all users equally (e.g., slow page load, broken image carousel, changed CTA placement). Note in the transcript that no quantitative locus was found; session recordings are the primary evidence. (Event-level analysis is a future addition for this tier.)
 
 ### If S2C is the primary driver
 
 S2C is about whether users on the select/date-picker page proceed to checkout.
+Work through two tiers in order.
 
-Angles worth querying:
-- `experience_id` level S2C rate pre/post — a concentrated drop in one or two
-  experiences points to a supply or pricing issue specific to those products
-- `count_days_available_30d` from `product_rankings_features` per experience —
-  a meaningful drop in available days correlates with S2C drops
-- When `count_days_available_30d` drops for a specific experience, run the
-  `inventory_availability` lead-time bucket query to pinpoint which window went
-  empty — this is the supply-side confirmation step that converts "availability
-  dropped" into a specific mechanism and DRI
-- `lead_time_days` distribution — did the post period skew toward longer lead
-  times? Cross-check with the supply-side bucket query: if the same window is
-  empty in `inventory_availability`, the lead-time shift is supply-caused, not
-  behavioural
-- If broad across experiences and sudden in trend: think checkout flow or
-  availability configuration change rather than a per-experience supply issue
+**Tier 1 — Run dimension cuts in parallel (first batch):**
+- `language` × S2C rate pre/post — a drop in one language points to a localised
+  select-page issue (broken date-picker for that locale, geo-specific pricing
+  shock at variant selection)
+- `device_type` × S2C rate pre/post — a mobile-concentrated drop points to a
+  select-page UX or rendering issue specific to small screens
+- `experience_id` × S2C rate pre/post — a drop in specific experiences points
+  to a supply or pricing issue for those products. When you find this, also pull
+  `count_days_available_30d` from `product_rankings_features` for those
+  experiences to confirm availability is the mechanism.
+
+**If language or device concentrates:** drill to the intersection (language × device if both signal), then to `page_url` within that segment. The URL is the actionable endpoint — give the stakeholder the specific select-page URLs and user counts.
+
+**If experience concentrates:**
+- Confirm with `count_days_available_30d` — a drop in available days corroborates supply
+- Run the `inventory_availability` lead-time bucket query to identify *which
+  window* went empty (this converts "availability dropped" into a specific
+  mechanism and a specific DRI)
+- Cross-check with `lead_time_days` distribution from the funnel table — if users
+  shifted toward longer lead times AND that same window is empty in
+  `inventory_availability`, the shift is supply-caused, not behavioural
+
+**Tier 2 — If no dimension concentrates (drop is broad):**
+A CE-wide S2C drop with no language/device/experience concentration is unusual.
+Check two things: (1) was there a change in the checkout flow or variant
+selection UI? (2) did availability drop uniformly across all experiences? A
+platform-wide availability configuration change (e.g., cut-off window extended
+globally) would produce a CE-wide S2C drop with no concentration.
 
 ### If C2O is the primary driver
 
 Check `c2o_sub` from `summary.json` first. C2O = C2A × A2O and they point to
-completely different causes:
+completely different causes. Always decompose first — do not run C2O queries
+before knowing which sub-metric moved.
 
-- **C2A drop** → users abandoned before submitting payment: checkout UX
-  friction, price display at checkout, coupon code breakage, trust signal
-  missing. DRI: Product.
-- **A2O drop** → users submitted payment but order failed: payment gateway
-  issue, fraud rule tightening, card decline rate increase. DRI: Payments.
+**If C2A dropped** (users reached checkout but didn't submit payment):
 
-Knowing which sub-metric moved determines who acts and what to query next.
+Four hypotheses to run in parallel:
+1. **Pax availability at checkout** — users selected a pax configuration (e.g.,
+   3 adults + 2 children) but no pack style exists for that combination. They hit
+   a "not available" state on the checkout page and abandon. Look at whether
+   certain experience × pax combinations are unavailable in the post period. This
+   is a supply/ops issue, not a UX issue — DRI is Ops/BDM.
+2. **Price display friction** — total price (including booking fees, taxes,
+   service charges) visible at checkout differs significantly from listing price.
+   Check if any fee or pricing component changed between pre and post.
+3. **Checkout UX change** — a form field change, CTA relabelling, coupon code
+   breakage, or trust signal removal. Concentrate investigation on device ×
+   C2A — mobile users are most sensitive to checkout form friction.
+4. **Session recordings** — once any of the above narrows to a locus (device,
+   language, or experience), pull recordings on the checkout page to confirm the
+   pattern.
+
+**If A2O dropped** (users submitted payment but order failed):
+
+Three hypotheses to run in parallel:
+1. **Payment gateway failure** — elevated decline rate from a specific gateway
+   or card network. Check if `payment_gateway` or `failure_reason` in
+   `order_attempted_events_v2` shows a spike for a specific payment method.
+2. **Fraud rule tightening** — a rule change or new fraud model version is
+   blocking more legitimate transactions. `fraud_evaluation_result_origin` would
+   show a change in classification rate.
+3. **Live inventory failure** — the experience slot was available when the user
+   reached checkout but sold out between checkout start and payment confirmation
+   (another user completed a booking first). Check for a spike in
+   `failure_reason` values indicating inventory unavailability at the moment of
+   order attempt.
+
+DRI for A2O: Payments team (gateway/fraud) or Engineering/Ops (live inventory
+sync failures).
 
 ---
 
@@ -994,4 +1040,5 @@ thinking and makes the inference scannable.
 | c004 | 2026-04-28 | Added `inventory_availability` and `inventory_changes` table schemas; updated `lead_time_days` dimension, experience-level availability proxy, and S2C investigation pattern to include lead-time bucket query for supply-side root cause pinpointing. |
 | c005 | 2026-04-28 | Generalised lead-time bucket query: bucket boundaries now carry inline guidance to adapt to the CE's booking horizon; interpreting results section now covers both window-specific and uniform-decline patterns separately, with explicit instruction not to assert a mechanism without corroborating evidence. |
 | c006 | 2026-04-29 | Added "Mix Cascade — Fixing the Primary Segment" section: full three-level cascade (Level 1 MB/HO from summary.json, Level 2 Paid/Organic custom BQ query, Level 3 Channel breakdown within Paid). Includes decision rule for when to fix a level, fixed segment declaration template, and filter strings to carry into all subsequent L2+ queries. |
+| c007 | 2026-04-29 | Expanded investigation patterns for all three funnel steps: (1) LP2S gains three-tier triage — dimension cuts first (parallel batch), then pricing if no concentration, then sessions as fallback — plus explicit "page URL is the target output" instruction once a dimension concentrates. (2) S2C gains language × S2C and device × S2C as first-pass cuts before experience-level; page URL endpoint added for language/device locus path; broad-drop fallback added. (3) C2O expanded with four C2A hypotheses (pax availability, price friction, UX change, sessions) and three A2O hypotheses (gateway, fraud, live inventory sync) with DRIs named for each. L0 branch map updated: S2C row adds language and device branches (d) and (e). |
 | c006 | 2026-04-28 | Fixed critical join-path bug in `inventory_availability` schema: removed non-existent `experience_id` column; corrected `tour_id` note to reference `dim_tours` as the bridge. Fixed lead-time bucket query: replaced `ce_experiences` CTE (which incorrectly selected `tour_id` from `dim_experiences`) with `ce_tours` CTE using the correct two-hop join `dim_experiences → dim_tours → inventory_availability`. |

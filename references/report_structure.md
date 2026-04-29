@@ -717,38 +717,63 @@ Plotly.newPlot('trend-chart', [
 
 **90-day + LY overlay chart:** Two traces — current year (blue solid) and LY (grey dashed) — both plotted against `currentDates` on the x-axis. Do NOT use actual LY calendar dates for the LY line; use the current-year date array so both lines sit at the same calendar position and are directly comparable month-over-month.
 
-**LY data guard (mandatory):** Before rendering, check that `lyCvr` is a non-empty array with at least one non-null value. If LY data is missing or all-null, show a warning banner instead of the chart:
-```html
-<div style="background:#fff3e0;border-left:4px solid #e65100;padding:8px 12px;font-size:12px;color:#bf360c;margin-bottom:8px;">
-  ⚠️ Last-year overlay unavailable — LY CVR series is absent from summary.json.
-  Chart shows current period only.
-</div>
+**Step 1 — Extract `lyCvr` from summary.json.** LY data is NOT a top-level key. It lives inside `trend_context.series` as entries tagged `"series": "ly"`, interleaved with current-year entries tagged `"series": "current"`. You must filter, extract, and align it to `currentDates` before doing anything else:
+
+```javascript
+// Extract currentDates and currentCvr from trend_context.series
+const currentSeries = summaryJson.trend_context.series.filter(e => e.series === 'current');
+const currentDates = currentSeries.map(e => e.date);
+const currentCvr   = currentSeries.map(e => e.cvr);
+
+// Build lyCvr aligned to currentDates (null for dates with no LY entry)
+const lyMap = {};
+summaryJson.trend_context.series
+  .filter(e => e.series === 'ly')
+  .forEach(e => { lyMap[e.date] = e.cvr; });
+const lyCvr = currentDates.map(d => lyMap[d] ?? null);
+```
+
+**Step 2 — LY data guard (mandatory).** A CE that had no Headout history last year will have all-zero LY CVR entries (not nulls). The guard must reject zeros as well as nulls — a flat line at 0% is not a valid LY overlay. If the guard fails, show the warning banner instead of an empty or misleading line:
+
+```javascript
+// Guard: requires at least one LY value that is non-null AND > 0
+const hasLyData = lyCvr.some(v => v !== null && v !== undefined && v > 0);
+if (!hasLyData) {
+  document.getElementById('trend-90day').innerHTML =
+    '<div style="background:#fff3e0;border-left:4px solid #e65100;padding:8px 12px;font-size:12px;color:#bf360c;">' +
+    '⚠️ Last-year overlay unavailable — no meaningful LY CVR data for this CE. Chart shows current period only.</div>';
+}
 ```
 
 X-axis: `tickformat: '%d %b'`, `dtick: 7 * 86400000` (weekly ticks in milliseconds) — shows "01 Jan", "08 Jan", etc., giving week-level resolution across the 90-day window.
 
-Post window: shade with a `rect` shape and a dashed vertical line at `post_start`. Use green (`rgba(46,125,50,0.05)`) for CVR improvement cases, red (`rgba(198,40,40,0.05)`) for CVR decline cases.
+Post window: shade with a `rect` shape and a dashed vertical line at `post_start`. Use **red** (`rgba(198,40,40,0.05)`) for CVR decline cases, green (`rgba(46,125,50,0.05)`) for CVR improvement cases.
 
 ```javascript
-// LY data guard — check before building traces
-const hasLyData = Array.isArray(lyCvr) && lyCvr.some(v => v !== null && v !== undefined);
-if (!hasLyData) {
-  document.getElementById('trend-90day').innerHTML =
-    '<div style="background:#fff3e0;border-left:4px solid #e65100;padding:8px 12px;font-size:12px;color:#bf360c;">' +
-    '⚠️ Last-year overlay unavailable — LY CVR series is absent from summary.json. Chart shows current period only.</div>';
-}
+// Define post period bounds and postDates for the annotation midpoint
+const POST_START = summaryJson.meta.post_start;
+const POST_END   = summaryJson.meta.post_end;
+const postDates  = currentDates.filter(d => d >= POST_START && d <= POST_END);
 
-// Both traces use currentDates — lyCvr values are plotted at the same seasonal position
+// Both traces use currentDates — lyCvr values plotted at the same seasonal position
+const currentYear = new Date(currentDates[0]).getFullYear();
+const lyYear = currentYear - 1;
 const traces90d = [
-  {type:'scatter', mode:'lines', name:'Current Year (2026)',
+  {type:'scatter', mode:'lines', name:'CVR ' + currentYear,
    x: currentDates, y: currentCvr, line:{color:'#6c8ebf', width:2}}
 ];
 if (hasLyData) {
   traces90d.push(
-    {type:'scatter', mode:'lines', name:'Last Year (2025)',
+    {type:'scatter', mode:'lines', name:'CVR ' + lyYear + ' (LY)',
      x: currentDates, y: lyCvr, line:{color:'#9e9e9e', dash:'dash', width:1.5}}
   );
 }
+
+const postShadeColor = (summaryJson.headline.delta.cvr < 0)
+  ? 'rgba(198,40,40,0.06)' : 'rgba(46,125,50,0.05)';
+const postLineColor  = (summaryJson.headline.delta.cvr < 0) ? '#c62828' : '#2e7d32';
+const midPostDate = postDates[Math.floor(postDates.length / 2)];
+
 Plotly.newPlot('trend-90day', traces90d, {
   height: 280,
   yaxis: {tickformat:'.1%', title:'CVR'},
@@ -759,12 +784,12 @@ Plotly.newPlot('trend-90day', traces90d, {
   margin: {l:55, r:20, t:30, b:60},
   shapes: [
     {type:'rect', x0:POST_START, x1:POST_END, y0:0, y1:1,
-     xref:'x', yref:'paper', fillcolor:'rgba(46,125,50,0.05)', line:{width:0}},
+     xref:'x', yref:'paper', fillcolor: postShadeColor, line:{width:0}},
     {type:'line', x0:POST_START, x1:POST_START, y0:0, y1:1,
-     xref:'x', yref:'paper', line:{color:'#2e7d32', dash:'dot', width:1}}
+     xref:'x', yref:'paper', line:{color: postLineColor, dash:'dot', width:1}}
   ],
-  annotations: [{x: midPostDate, y: chartMax, text:'Post period',
-    font:{color:'#2e7d32', size:10}, showarrow:false}]
+  annotations: [{x: midPostDate, y: 0.92, xref:'x', yref:'paper',
+    text:'Post period', font:{color: postLineColor, size:10}, showarrow:false}]
 }, {responsive:true});
 ```
 
@@ -781,4 +806,6 @@ Plotly.newPlot('trend-90day', traces90d, {
 | c004 | 2026-04-28 | Three structural changes: (1) 90-day CVR trend chart moves from Section 3 to Section 1 — always shown after metric cards, before callout, so seasonal context is visible immediately. (2) Callout has a positive-CVR variant: green border, "CVR Improved — What's Driving It & What's Holding It Back" heading, questions reframed around drivers/headwinds rather than what broke. (3) 90-day chart x-axis fix: both current-year and LY lines now use currentDates on the x-axis (aligned by calendar position, not actual date), with tickformat '%b %Y' to show month labels. |
 | c006 | 2026-04-28 | Added inventory lead-time bucket table to Section 3 — new row in "What belongs in Section 3" table and a dedicated format spec with HTML pattern. Always follows the availability proxy table; verdict line names the specific window that went empty, not just "availability dropped". |
 | c007 | 2026-04-28 | Generalised lead-time bucket spec: two verdict forms (window-specific spike vs uniform decline); HTML pattern replaced specific example rows with placeholders and a note to adapt buckets to the CE's booking horizon; subtext guidance changed from "state the mechanism" to "describe the pattern and what to investigate" to prevent asserting unconfirmed causes. |
+| c009 | 2026-04-29 | 90-day chart LY overlay: two fixes. (1) Extraction step added — `lyCvr` must be built by filtering `trend_context.series` where `series === 'ly'` and aligning to `currentDates`; it is not a top-level key in summary.json. Complete extraction snippet added to spec. (2) Data guard strengthened to check `v > 0` in addition to non-null/undefined — zero-filled LY series (CE had no meaningful Headout history last year) now correctly triggers the warning banner instead of rendering a flat line at 0%. Also fixed hardcoded green post-window shade in code sample — shade colour now derived from `headline.delta.cvr` sign (red for decline, green for improvement). |
 | c008 | 2026-04-29 | (1) Fixed Segment banner: new HTML component rendered once after the mix cascade and before the Shapley block, declaring the fixed MB/HO × Paid/Organic × Channel scope that applies to all subsequent funnel analysis. Includes fallback note if segment cannot be fixed. (2) 90-day chart x-axis changed from monthly (`dtick:'M1'`) to weekly ticks (`dtick: 7*86400000`, `tickformat:'%d %b'`) for week-level resolution across the 90-day window. (3) LY data guard added: pre-render check for non-empty lyCvr array; shows ⚠️ warning banner instead of silent missing line if LY series is absent from summary.json. (4) "What belongs in Section 3" updated: mix analysis now explicitly "Mix cascade (three levels: MB/HO → Paid/Organic → Channel)" replacing the single mix table entry. |
+| c010 | 2026-04-29 | Added `POST_START`, `POST_END`, and `postDates` variable definitions to the 90-day chart spec — previously used in `shapes` and annotation midpoint but never defined in the snippet. Now explicitly derived from `summaryJson.meta.post_start/post_end`. |
