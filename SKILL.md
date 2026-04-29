@@ -25,12 +25,12 @@ cat "$SKILL_DIR/references/report_structure.md"
 Each file owns a distinct concern:
 
 **`context.md`** — data vocabulary, table schemas, query rules, dimension meanings,
-funnel step definitions, investigation patterns, and analytical principles. Read
-this before touching any data or forming hypotheses.
+and funnel step definitions. Read this before writing any query.
 
-**`hypothesis.md`** — historical priors from 21 Headout RCAs, ranked by frequency.
-Read after answering the three mandatory questions. Use to orient hypothesis
-generation — not to constrain it.
+**`hypothesis.md`** — the central branch reference for the investigation. Two levels:
+(1) L0 routing map and first-pass branch sets by funnel step — which branches to open
+at each level; (2) historical patterns from 21 Headout RCAs — specific mechanism
+hypotheses for each confirmed scenario. Read this at Step 2 before forming any branch.
 
 **`actions.md`** — cause-to-action mapping. Once a root cause is confirmed, find
 the matching category here and use the listed actions for the report's action cards.
@@ -217,7 +217,7 @@ investigation is anchored to those steps. Do not deep-dive steps that carry
 less than ~10% of the delta — even if a rate change is visible there, it is not
 the driver.
 
-See `context.md` → "Investigation tree — L0 to L1 branch map" for how each
+See `hypothesis.md` → "L0 signal → first branches to open" for how each
 shapley outcome opens specific L1 branches.
 
 **Signal 3 — trend_context (timing and seasonal calibration)**
@@ -279,7 +279,7 @@ or experience, and the pattern you would expect if it were true:
   on iOS, causing users to see no available slots and abandon the select page"
 
 **Where branches come from:** Open the first set of branches using the
-investigation patterns in `context.md` for the primary funnel step — those
+first-pass branch sets in `hypothesis.md` for the primary funnel step — those
 patterns are the default starting set. Run the first set in parallel, then read
 the results. Each result either opens a new branch, closes one, or concentrates
 the investigation — and what the data shows determines what the next branches
@@ -508,3 +508,4 @@ catches it earlier next time, rather than adding more loops within the skill.
 | c017 | 2026-04-29 | Mix cascade redesigned as mandatory L1 step: three levels (MB/HO → Paid/Organic → Channel within Paid). Fixed segment declared from cascade results; all L2+ funnel queries carry the fixed segment filters. L1 and L2+ steps renamed in Step 2 accordingly. context.md gains full Mix Cascade section with three query templates, decision rule, and fixed segment declaration template. report_structure.md gains Fixed Segment banner HTML spec and updated 90-day chart spec (weekly ticks + LY data guard). |
 | c018 | 2026-04-29 | L2+ section rewritten to make hypothesis generation self-extending: context.md patterns are explicitly the default *starting set*, not an exhaustive list. Results themselves generate the next hypothesis. Four result types defined: Confirms, Rules out, Concentrates, and Surprises (the last being new — an unexpected result generates a new branch even if not on the default list). "Investigation ends at the leaf, not at list exhaustion" stated explicitly. context.md Common Investigation Patterns header rewritten to match — replaces weak "not rails" disclaimer with explicit loop logic and three common reasons a list runs out before a leaf is reached. |
 | c019 | 2026-04-29 | Removed "write 2–4 specific, falsifiable hypotheses" from L2+ — this was a leftover artifact from the old Q1/Q2/Q3 model that contradicted the tree structure. L2+ now opens branches from the context.md default set and grows them level-by-level from what the data shows. Branches are not a fixed upfront list. |
+| c020 | 2026-04-29 | Updated file role descriptions: context.md no longer owns "investigation patterns"; hypothesis.md described as two-level branch reference (L0 routing + first-pass branch sets + historical patterns). L2+ pointer updated from context.md to hypothesis.md. |

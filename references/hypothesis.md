@@ -2,19 +2,176 @@
 
 ## How to use this file
 
-Read this after answering the three mandatory questions in Step 2. It provides historical patterns from 21 Headout RCAs to orient your hypothesis generation — not to constrain it.
+This is the central branch reference for the entire investigation. It operates at two levels:
 
-**These patterns are starting points, not a menu.** Form your own hypotheses from what the data actually shows. If `summary.json` points to a mechanism not listed here, follow it — the data is always the authority. The patterns here are ranked by historical frequency; they exist to help you not overlook the common before pursuing the unusual.
+**Level 1 — L0 routing map and first-pass branch sets** (sections immediately below): these tell you *which branches to open* at L1 and L2. Read this before forming any hypothesis. The L0 routing map maps each signal combination to a default branch set. The first-pass branch sets tell you which dimension cuts to run first for each primary funnel driver.
 
-**You are not required to match a pattern below.** If none of the patterns fit what you see, generate the hypotheses the data calls for. A good hypothesis names a specific mechanism, a segment it would affect, and a date or pattern you would expect to see if it were true — regardless of whether it appears in this file.
+**Level 2 — Historical patterns** (Pattern 1–10 at the bottom): these provide *specific mechanism hypotheses* once a first-pass branch confirms a direction. Use them to decide *why* something may have happened in a confirmed dimension — the "why" behind a confirmed signal.
+
+Use Level 1 to decide where to look first. Use Level 2 to decide why it might have happened there.
+
+**These patterns are starting points, not a menu.** Form your own hypotheses from what the data actually shows. If `summary.json` points to a mechanism not listed here, follow it — the data is always the authority. A good hypothesis names a specific mechanism, a segment it would affect, and a date or pattern you would expect to see if it were true — regardless of whether it appears in this file.
 
 ---
 
-Use this file during Step 2 (Investigation). Once you have identified the **primary Shapley driver** and answered Q3 (sudden vs gradual), scan the relevant patterns below as one input into your hypothesis generation. Each pattern is drawn from historical Headout RCAs across 21 MMPs.
+## L0 signal → first branches to open
+
+The three L0 signals (mix_dominance, shapley, trend_context) each open a
+specific set of L1 branches. Use this table as the default starting set —
+then adapt based on what the data actually shows.
+
+| L0 signal | Value / pattern | L1 branches to open |
+|-----------|----------------|---------------------|
+| `mix_dominance.is_dominant = true` | Routing story | (a) Which MB/HO segment or channel drove the shift? (b) Which specific URLs or channels gained/lost volume? |
+| Shapley: LP2S dominates | LP2S is the funnel story | (a) Device × LP2S — mobile-concentrated? (b) Page type × LP2S — Collection vs Experience? (c) Price change for top experiences? (d) Specific URL-level traffic loss? |
+| Shapley: S2C dominates | S2C is the funnel story | (a) Language × S2C — one language concentrated? (b) Device × S2C — mobile select-page issue? (c) Experience-level S2C + availability proxy (count_days_available_30d)? (d) Lead time distribution shift? (e) MB vs HO S2C split — concentrated in one segment? |
+| Shapley: C2O dominates | C2O is the funnel story | (a) C2A vs A2O sub-decomposition (which sub-metric moved)? (b) Channel × C2O — paid vs organic? (c) Device × C2O — mobile checkout friction? |
+| Trend: sharp break on date X | Event on date X | (a) What dimension shows the largest rate change anchored to that date? (b) Paid campaign change? Deploy? Supply configuration? |
+| Trend: gradual erosion | Compounding trend | (a) Supply trend (availability proxy over time)? (b) Pricing trend? (c) Traffic quality trend (channel mix shift)? |
+| Trend: seasonal (`structural_delta_cvr` small) | Calibrate depth | Still investigate — but use `structural_delta_cvr` as the magnitude to explain, not `current_delta_cvr`. Any finding must account for the non-seasonal share. |
+
+Multiple L0 signals combine. If S2C dominates AND trend shows a sharp break,
+the L1 batch is: "experience-level S2C anchored to break date" + "availability
+proxy change on that date". If mix is dominant AND gradual, the L1 batch is
+"which channel or URL has been losing traffic over the past N weeks".
+
+The table is the default starting set. It does not replace reading the actual
+numbers — if a signal points in an unexpected direction, follow it.
 
 ---
 
-## URL concentration — a valid hypothesis for any primary driver
+## First-pass branch sets by primary driver
+
+**These are starting points, not a complete list.** They cover the most common
+angles for each funnel step. After running any batch of queries, ask yourself:
+*does this result suggest a hypothesis that isn't on this list?* If yes, add it.
+The cuts below tell you where to look first — they don't tell you what you'll
+find or what to hypothesize next. What you find determines that.
+
+The investigation is complete when you reach a leaf (a specific mechanism at a
+specific segment, experience, URL, or date). It is not complete when the list
+below is exhausted. If you've run all the tiers and have no leaf, that is a
+signal to look more carefully at what the data already showed — a surprising
+number, an unexplained gap, a dimension that partially concentrated — and form
+a new hypothesis from it.
+
+Common reasons the list runs out before a leaf is found:
+- The real locus is a cross-cut (e.g., French × iOS) not tested individually
+- The mechanism is at a finer grain (specific URL, specific experience × date)
+  not yet drilled into
+- The cause is outside the funnel table entirely (pricing, availability, a
+  campaign event) and needs a separate query against a different table
+
+### Mix — first-pass branches
+
+Write a query: `COUNT(DISTINCT user_id)` by `page_url` pre vs post for the
+affected segment (MB or the channel that shifted). Which URLs gained or lost
+volume? If a paid campaign was serving specific collection pages in the pre
+period and stopped, those pages will show a sharp traffic drop. That is the
+finding. Marketing owns it.
+
+### LP2S — first-pass branches
+
+LP2S is about whether users landing on the listing page click through to the
+select page. Work through three tiers in order — don't skip ahead.
+
+**Tier 1 — Run dimension cuts in parallel (first batch):**
+- `device_type` × LP2S rate pre/post — mobile-concentrated drops point to a
+  UI or performance change
+- `language` × LP2S rate — a single language dropping points to geo-specific
+  pricing or a localised UX issue
+- `page_type` × LP2S rate — a drop in Collection but not Experience pages points
+  to browse-level friction
+- `experience_id` × LP2S rate — a drop in a few specific experiences points to
+  listing quality, price, or availability visible on the listing
+
+**If a dimension concentrates:** run the intersection (e.g., French × mobile), then drill to `page_url` within that segment. The page URL is the target output — it is what the stakeholder needs to act on. A finding is not complete until you can say "these specific URLs are where LP2S dropped, here are the user counts."
+
+**Tier 2 — If no dimension concentrates (drop is CE-wide and flat across cuts):**
+Run pricing analysis — `final_price_usd` from `product_rankings_features` pre vs post for top experiences. Did prices increase, and does the timing align with the LP2S drop? A CE-wide price uplift will depress LP2S broadly with no dimension cut showing concentration.
+
+**Tier 3 — If pricing is also flat:**
+The drop is broad, no pricing explanation, no concentrated locus. Session recordings are the next tool — look for a UX pattern that affects all users equally (e.g., slow page load, broken image carousel, changed CTA placement). Note in the transcript that no quantitative locus was found; session recordings are the primary evidence. (Event-level analysis is a future addition for this tier.)
+
+### S2C — first-pass branches
+
+S2C is about whether users on the select/date-picker page proceed to checkout.
+Work through two tiers in order.
+
+**Tier 1 — Run dimension cuts in parallel (first batch):**
+- `language` × S2C rate pre/post — a drop in one language points to a localised
+  select-page issue (broken date-picker for that locale, geo-specific pricing
+  shock at variant selection)
+- `device_type` × S2C rate pre/post — a mobile-concentrated drop points to a
+  select-page UX or rendering issue specific to small screens
+- `experience_id` × S2C rate pre/post — a drop in specific experiences points
+  to a supply or pricing issue for those products. When you find this, also pull
+  `count_days_available_30d` from `product_rankings_features` for those
+  experiences to confirm availability is the mechanism.
+
+**If language or device concentrates:** drill to the intersection (language × device if both signal), then to `page_url` within that segment. The URL is the actionable endpoint — give the stakeholder the specific select-page URLs and user counts.
+
+**If experience concentrates:**
+- Confirm with `count_days_available_30d` — a drop in available days corroborates supply
+- Run the `inventory_availability` lead-time bucket query to identify *which
+  window* went empty (this converts "availability dropped" into a specific
+  mechanism and a specific DRI)
+- Cross-check with `lead_time_days` distribution from the funnel table — if users
+  shifted toward longer lead times AND that same window is empty in
+  `inventory_availability`, the shift is supply-caused, not behavioural
+
+**Tier 2 — If no dimension concentrates (drop is broad):**
+A CE-wide S2C drop with no language/device/experience concentration is unusual.
+Check two things: (1) was there a change in the checkout flow or variant
+selection UI? (2) did availability drop uniformly across all experiences? A
+platform-wide availability configuration change (e.g., cut-off window extended
+globally) would produce a CE-wide S2C drop with no concentration.
+
+### C2O — first-pass branches
+
+Check `c2o_sub` from `summary.json` first. C2O = C2A × A2O and they point to
+completely different causes. Always decompose first — do not run C2O queries
+before knowing which sub-metric moved.
+
+**If C2A dropped** (users reached checkout but didn't submit payment):
+
+Four hypotheses to run in parallel:
+1. **Pax availability at checkout** — users selected a pax configuration (e.g.,
+   3 adults + 2 children) but no pack style exists for that combination. They hit
+   a "not available" state on the checkout page and abandon. Look at whether
+   certain experience × pax combinations are unavailable in the post period. This
+   is a supply/ops issue, not a UX issue — DRI is Ops/BDM.
+2. **Price display friction** — total price (including booking fees, taxes,
+   service charges) visible at checkout differs significantly from listing price.
+   Check if any fee or pricing component changed between pre and post.
+3. **Checkout UX change** — a form field change, CTA relabelling, coupon code
+   breakage, or trust signal removal. Concentrate investigation on device ×
+   C2A — mobile users are most sensitive to checkout form friction.
+4. **Session recordings** — once any of the above narrows to a locus (device,
+   language, or experience), pull recordings on the checkout page to confirm the
+   pattern.
+
+**If A2O dropped** (users submitted payment but order failed):
+
+Three hypotheses to run in parallel:
+1. **Payment gateway failure** — elevated decline rate from a specific gateway
+   or card network. Check if `payment_gateway` or `failure_reason` in
+   `order_attempted_events_v2` shows a spike for a specific payment method.
+2. **Fraud rule tightening** — a rule change or new fraud model version is
+   blocking more legitimate transactions. `fraud_evaluation_result_origin` would
+   show a change in classification rate.
+3. **Live inventory failure** — the experience slot was available when the user
+   reached checkout but sold out between checkout start and payment confirmation
+   (another user completed a booking first). Check for a spike in
+   `failure_reason` values indicating inventory unavailability at the moment of
+   order attempt.
+
+DRI for A2O: Payments team (gateway/fraud) or Engineering/Ops (live inventory
+sync failures).
+
+---
+
+## URL concentration — a cross-cutting check
 
 Before reading the step-specific patterns below, check the URL breakdown in
 `summary.json` for the affected metric. URL concentration is a legitimate
@@ -51,6 +208,12 @@ CE traffic on the affected metric qualify as evidence. Long-tail URLs (those
 representing a small fraction of total CE traffic) produce high-variance rate
 estimates — treat their signals as directional at best, not as primary
 evidence. See the majority-contributor principle in `SKILL.md`.
+
+---
+
+## Historical patterns — mechanism detail by scenario
+
+Use these once a first-pass branch confirms. They provide the specific mechanism hypotheses for each confirmed scenario — the "why" behind a confirmed dimension signal.
 
 ---
 
@@ -221,3 +384,4 @@ Before diagnosing any funnel step: if mix is dominant, the story is about traffi
 | c001 | 2026-04-24 | Initial version — 10 patterns drawn from 21 historical Headout MMPs |
 | c002 | 2026-04-24 | Added "How to use this file" preamble clarifying these are historical priors, not a constraint; Claude generates its own hypotheses from data and is not limited to patterns listed here |
 | c003 | 2026-04-24 | Added "URL concentration" preamble section before Pattern 1 — URL-level concentration is now a first-class hypothesis for all four primary driver types (mix, LP2S, S2C, C2O), with volume filter requirement and pointer to majority-contributor principle in SKILL.md |
+| c004 | 2026-04-29 | Restructured as two-level reference: Level 1 (L0 routing map + first-pass branch sets by funnel step) moved from context.md; Level 2 (historical patterns) retained. "How to use this file" updated to reflect full role as the central branch reference for all investigation levels. |
