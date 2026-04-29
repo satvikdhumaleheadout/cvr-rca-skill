@@ -898,8 +898,25 @@ numbers — if a signal points in an unexpected direction, follow it.
 
 ## Common Investigation Patterns
 
-These are not rails — they are the directions the evidence typically points.
-Start here, but follow what the data actually shows.
+**These are starting points, not a complete list.** They cover the most common
+angles for each funnel step. After running any batch of queries, ask yourself:
+*does this result suggest a hypothesis that isn't on this list?* If yes, add it.
+The cuts below tell you where to look first — they don't tell you what you'll
+find or what to hypothesize next. What you find determines that.
+
+The investigation is complete when you reach a leaf (a specific mechanism at a
+specific segment, experience, URL, or date). It is not complete when the list
+below is exhausted. If you've run all the tiers and have no leaf, that is a
+signal to look more carefully at what the data already showed — a surprising
+number, an unexplained gap, a dimension that partially concentrated — and form
+a new hypothesis from it.
+
+Common reasons the list runs out before a leaf is found:
+- The real locus is a cross-cut (e.g., French × iOS) not tested individually
+- The mechanism is at a finer grain (specific URL, specific experience × date)
+  not yet drilled into
+- The cause is outside the funnel table entirely (pricing, availability, a
+  campaign event) and needs a separate query against a different table
 
 ### If mix is the primary explanation
 
@@ -1041,4 +1058,5 @@ thinking and makes the inference scannable.
 | c005 | 2026-04-28 | Generalised lead-time bucket query: bucket boundaries now carry inline guidance to adapt to the CE's booking horizon; interpreting results section now covers both window-specific and uniform-decline patterns separately, with explicit instruction not to assert a mechanism without corroborating evidence. |
 | c006 | 2026-04-29 | Added "Mix Cascade — Fixing the Primary Segment" section: full three-level cascade (Level 1 MB/HO from summary.json, Level 2 Paid/Organic custom BQ query, Level 3 Channel breakdown within Paid). Includes decision rule for when to fix a level, fixed segment declaration template, and filter strings to carry into all subsequent L2+ queries. |
 | c007 | 2026-04-29 | Expanded investigation patterns for all three funnel steps: (1) LP2S gains three-tier triage — dimension cuts first (parallel batch), then pricing if no concentration, then sessions as fallback — plus explicit "page URL is the target output" instruction once a dimension concentrates. (2) S2C gains language × S2C and device × S2C as first-pass cuts before experience-level; page URL endpoint added for language/device locus path; broad-drop fallback added. (3) C2O expanded with four C2A hypotheses (pax availability, price friction, UX change, sessions) and three A2O hypotheses (gateway, fraud, live inventory sync) with DRIs named for each. L0 branch map updated: S2C row adds language and device branches (d) and (e). |
+| c008 | 2026-04-29 | Common Investigation Patterns header rewritten: "not rails" disclaimer replaced with explicit hypothesis loop logic — patterns are the default starting set, results generate the next hypothesis, investigation ends at the leaf not at list exhaustion. Three common reasons a list runs out before a leaf is reached added (cross-cut not yet tested, finer grain not yet drilled, cause is in a different table). |
 | c006 | 2026-04-28 | Fixed critical join-path bug in `inventory_availability` schema: removed non-existent `experience_id` column; corrected `tour_id` note to reference `dim_tours` as the bridge. Fixed lead-time bucket query: replaced `ce_experiences` CTE (which incorrectly selected `tour_id` from `dim_experiences`) with `ce_tours` CTE using the correct two-hop join `dim_experiences → dim_tours → inventory_availability`. |
