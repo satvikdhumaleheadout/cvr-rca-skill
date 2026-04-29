@@ -20,20 +20,25 @@ The three L0 signals (mix_dominance, shapley, trend_context) each open a
 specific set of L1 branches. Use this table as the default starting set —
 then adapt based on what the data actually shows.
 
-| L0 signal | Value / pattern | L1 branches to open |
-|-----------|----------------|---------------------|
-| `mix_dominance.is_dominant = true` | Routing story | (a) Which MB/HO segment or channel drove the shift? (b) Which specific URLs or channels gained/lost volume? |
-| Shapley: LP2S dominates | LP2S is the funnel story | (a) Device × LP2S — mobile-concentrated? (b) Page type × LP2S — Collection vs Experience? (c) Price change for top experiences? (d) Specific URL-level traffic loss? |
-| Shapley: S2C dominates | S2C is the funnel story | (a) Language × S2C — one language concentrated? (b) Device × S2C — mobile select-page issue? (c) Experience-level S2C + availability proxy (count_days_available_30d)? (d) Lead time distribution shift? (e) MB vs HO S2C split — concentrated in one segment? |
-| Shapley: C2O dominates | C2O is the funnel story | (a) C2A vs A2O sub-decomposition (which sub-metric moved)? (b) Channel × C2O — paid vs organic? (c) Device × C2O — mobile checkout friction? |
-| Trend: sharp break on date X | Event on date X | (a) What dimension shows the largest rate change anchored to that date? (b) Paid campaign change? Deploy? Supply configuration? |
-| Trend: gradual erosion | Compounding trend | (a) Supply trend (availability proxy over time)? (b) Pricing trend? (c) Traffic quality trend (channel mix shift)? |
-| Trend: seasonal (`structural_delta_cvr` small) | Calibrate depth | Still investigate — but use `structural_delta_cvr` as the magnitude to explain, not `current_delta_cvr`. Any finding must account for the non-seasonal share. |
+The L1 cascade always runs first and determines the path. Shapley and trend
+signals from L0 apply only once the cascade confirms a conversion story.
 
-Multiple L0 signals combine. If S2C dominates AND trend shows a sharp break,
-the L1 batch is: "experience-level S2C anchored to break date" + "availability
-proxy change on that date". If mix is dominant AND gradual, the L1 batch is
-"which channel or URL has been losing traffic over the past N weeks".
+| Signal | Value / pattern | What it opens |
+|--------|----------------|---------------|
+| **Cascade: mix exit at Level 1** | MB/HO share shifted | Why did HO traffic fall or MB grow? Campaign paused, budget cut, routing error? (Pattern 7) |
+| **Cascade: mix exit at Level 2** | Paid/organic share shifted | Why did paid spend fall or organic grow? Campaign pause, SIS cap, budget reallocation? (Patterns 1, 7) |
+| **Cascade: mix exit at Level 3** | Channel share shifted within paid | Why did budget or impression share move between channels? Bid strategy, budget reallocation, Performance Max expansion? |
+| **Cascade: conversion at all levels → Shapley: LP2S dominates** | LP2S is the funnel story | First-pass branches for LP2S (see below) |
+| **Cascade: conversion at all levels → Shapley: S2C dominates** | S2C is the funnel story | First-pass branches for S2C (see below) |
+| **Cascade: conversion at all levels → Shapley: C2O dominates** | C2O is the funnel story | First-pass branches for C2O (see below) |
+| **Trend: sharp break on date X** | Event on that date | Anchor all L2 branches to that date — which dimension shows the largest change starting that day? |
+| **Trend: gradual erosion** | Compounding trend | Supply trend (availability over time), pricing trend, traffic quality trend |
+| **Trend: seasonal** (`structural_delta_cvr` small) | Calibrate depth | Use `structural_delta_cvr` as the magnitude to explain — not `current_delta_cvr` |
+
+Shapley and trend signals combine. If S2C dominates AND trend shows a sharp
+break, L2 branches are "experience-level S2C anchored to break date" +
+"availability proxy on that date." Trend context sharpens every branch — it
+does not replace the cascade.
 
 The table is the default starting set. It does not replace reading the actual
 numbers — if a signal points in an unexpected direction, follow it.
@@ -385,3 +390,4 @@ Before diagnosing any funnel step: if mix is dominant, the story is about traffi
 | c002 | 2026-04-24 | Added "How to use this file" preamble clarifying these are historical priors, not a constraint; Claude generates its own hypotheses from data and is not limited to patterns listed here |
 | c003 | 2026-04-24 | Added "URL concentration" preamble section before Pattern 1 — URL-level concentration is now a first-class hypothesis for all four primary driver types (mix, LP2S, S2C, C2O), with volume filter requirement and pointer to majority-contributor principle in SKILL.md |
 | c004 | 2026-04-29 | Restructured as two-level reference: Level 1 (L0 routing map + first-pass branch sets by funnel step) moved from context.md; Level 2 (historical patterns) retained. "How to use this file" updated to reflect full role as the central branch reference for all investigation levels. |
+| c005 | 2026-04-29 | L0 routing table rewritten: first rows now show cascade exit conditions (mix exit at Level 1/2/3) before the Shapley rows, reflecting that the cascade runs first and Shapley rows apply only after a conversion-path cascade completes. mix_dominance.is_dominant = true row removed — mix determination happens through cascade levels, not as a pre-gate. |

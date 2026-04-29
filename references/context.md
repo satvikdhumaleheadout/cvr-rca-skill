@@ -177,28 +177,55 @@ fall even if all per-channel rates hold. That is a `channel_mix_dominant` case.
 
 ---
 
-## Mix Cascade — Fixing the Primary Segment
+## Mix Cascade — Routing vs Conversion Determination
 
-Run this as the first L1 query batch in every investigation, before forming any
-funnel hypotheses. The cascade narrows traffic to the dominant segment in three
-levels; every subsequent query is filtered to that fixed segment.
+The cascade is run first, before any funnel step analysis. It has three levels.
+At each level you answer two questions before moving to the next:
 
-### Why fix a segment first
+1. **Is this a mix change or a conversion change?**
+   - **Mix change** = traffic composition shifted between segments (e.g., more
+     users went to lower-CVR organic, or HO paid traffic fell). The CVR drop is
+     explained by routing, not by a funnel step breaking. Exit the cascade here
+     and investigate the routing story for this level.
+   - **Conversion change** = rates declined within the dominant segment while
+     composition was stable. The story is about funnel quality, not routing.
+     Fix the segment and descend to the next level.
 
-Funnel rates (LP2S, S2C, C2O) computed on the full CE mix noisy signals from
-segments with very different base CVRs — organic SEO users, high-intent paid
-search users, and CRM users all behave differently. Fixing the primary segment
-first means your LP2S / S2C / C2O findings describe a homogeneous cohort, not
-an average across segments that converts at 2× different rates.
+2. **Which segment to fix** (only if conversion change): the one with the
+   largest absolute checkout impact — see decision rule below.
+
+To distinguish mix from conversion at each level, use the decomposition from
+`context.md → "Mix vs Conversion Effect"`:
+- `mix_effect = Δshare × pre_rate` — how much CVR changed due to composition shift
+- `conversion_effect = pre_share × Δrate` — how much CVR changed due to rate decline
+
+If `mix_effect` is the dominant term → routing story, exit here.
+If `conversion_effect` is the dominant term → fix and proceed.
 
 ### Level 1 — MB vs HO
 
-Already computed in `summary.json` (`mix.mb_share`, `mix.ho_share`). Read it
-directly — no custom query needed. Identify which brand has the larger user
-volume AND carries the larger absolute CVR impact (rate delta × post users).
-Fix `is_microbrand_page = TRUE` (MB) or `FALSE` (HO) for all downstream queries.
+Already in `summary.json` (`mix.mb_share`, `mix.ho_share`, per-segment CVRs).
+No query needed. Compute mix_effect and conversion_effect for MB vs HO.
 
-### Level 2 — Paid vs organic within the fixed brand
+- **Mix exit:** HO traffic share fell significantly while per-brand rates held
+  → the story is "HO paid traffic was reduced, shifting composition toward
+  lower-CVR MB." Investigate routing: what changed in HO-directed campaigns or
+  traffic sources? (hypothesis.md Pattern 7)
+- **Conversion → fix:** rates declined within MB or HO while shares held.
+  Fix `is_microbrand_page = TRUE` (MB) or `FALSE` (HO) — whichever has the
+  larger absolute checkout impact (|Δcvr| × post users).
+
+### Level 2 — Paid vs Organic within the fixed brand
+
+Run the query below. Compute mix_effect and conversion_effect for Paid vs
+Organic within the fixed brand.
+
+- **Mix exit:** paid traffic share fell (e.g., a campaign was paused or budget
+  cut) while organic rates held → the story is "paid spend reduced, shifting
+  toward lower-intent organic traffic." Investigate routing: which campaign
+  changed? (hypothesis.md Patterns 7, 1)
+- **Conversion → fix:** rates declined within Paid or Organic while shares held.
+  Fix the dominant type — almost always Paid.
 
 ```sql
 SELECT
@@ -225,13 +252,17 @@ GROUP BY 1, 2
 ORDER BY 1, 2
 ```
 
-Fix `Paid` or `Organic` based on which carries the larger absolute checkout
-impact. If organic is primary, note it — organic drops typically point to SEO
-ranking changes or content quality, not product issues.
+### Level 3 — Channel breakdown within Paid
 
-### Level 3 — Channel breakdown within paid
+Only run if `Paid` was fixed in Level 2. Compute mix_effect and
+conversion_effect per channel.
 
-Only run if `Paid` was fixed in Level 2.
+- **Mix exit:** budget or impression share shifted between channels (e.g.,
+  Google Search spend moved toward Performance Max, which brings lower-intent
+  traffic). Investigate routing: which campaign budget or bid strategy changed?
+- **Conversion → fix:** rates declined within one dominant channel while others
+  held. Fix that channel (e.g., Google Search). Exclude `Others` and `Direct`
+  from the fix decision — they are catch-alls with mixed intent.
 
 ```sql
 SELECT
@@ -256,39 +287,36 @@ GROUP BY 1, 2
 ORDER BY 1, 2
 ```
 
-Fix the channel with the largest absolute checkout impact. Exclude `Others` and
-`Direct` from the fix decision — they are catch-alls with mixed intent.
-
-### Decision rule for fixing
+### Decision rule for fixing (conversion path)
 
 Fix a level when **one segment has >15% of total post-period users AND its
 absolute checkout impact (|Δcvr| × post users) exceeds all other segments
-combined**. If the drop is evenly distributed across segments, do not fix at
-that level — log "distributed, no dominant segment" and carry all values forward.
+combined**. If the drop is evenly distributed across segments, log "distributed,
+no dominant segment" and carry all values forward without fixing.
 
-### Declaring the fixed segment
+### Declaring the outcome in the transcript
 
-After the cascade, declare the fixed segment explicitly in the transcript before
-writing any further hypotheses:
+After the cascade completes, declare the outcome explicitly before opening any
+funnel branches. Two possible forms:
 
+**If all three levels showed conversion changes (most common):**
 ```
+Mix cascade result: conversion change at all levels — no routing story
 Fixed segment: MB · Paid · Google Ads
-Filter applied to all subsequent queries:
+Filters for all subsequent queries:
   AND is_microbrand_page = TRUE
   AND channel_name = 'Google Ads'
 ```
 
-Every L1+ query after this point must carry these filters. Do not run funnel
-analysis on the full CE population after the segment is fixed.
-
-If the cascade stopped at Level 1 (e.g., organic is primary with no channel
-concentration), declare that too:
-
+**If the cascade exited at a mix level:**
 ```
-Fixed segment: MB · Organic (no channel concentration)
-Filter: AND is_microbrand_page = TRUE
-        AND channel_name NOT IN ('Google Ads','Microsoft Ads','Facebook Ads (Meta)','Affiliates')
+Mix cascade result: routing story — mix change detected at Level [1/2/3]
+Exit reason: [e.g., "HO paid traffic share fell from 45% → 18% while MB rates held flat"]
+Investigation direction: why did [segment] lose volume? (no funnel deep-dive needed)
 ```
+
+Every funnel query after a conversion-path cascade must carry the fixed
+segment filters. Do not run funnel analysis on the full CE population.
 
 ---
 
@@ -904,3 +932,4 @@ thinking and makes the inference scannable.
 | c008 | 2026-04-29 | Common Investigation Patterns header rewritten: "not rails" disclaimer replaced with explicit hypothesis loop logic — patterns are the default starting set, results generate the next hypothesis, investigation ends at the leaf not at list exhaustion. Three common reasons a list runs out before a leaf is reached added (cross-cut not yet tested, finer grain not yet drilled, cause is in a different table). |
 | c006 | 2026-04-28 | Fixed critical join-path bug in `inventory_availability` schema: removed non-existent `experience_id` column; corrected `tour_id` note to reference `dim_tours` as the bridge. Fixed lead-time bucket query: replaced `ce_experiences` CTE (which incorrectly selected `tour_id` from `dim_experiences`) with `ce_tours` CTE using the correct two-hop join `dim_experiences → dim_tours → inventory_availability`. |
 | c009 | 2026-04-29 | Moved "Investigation tree — L0 to L1 branch map" and "Common Investigation Patterns" to hypothesis.md — these are hypothesis logic, not business context. context.md now owns business vocabulary, table schemas, analytical concepts, and query rules only. |
+| c010 | 2026-04-29 | Mix Cascade redesigned as routing vs conversion determination. Each of the three levels (MB/HO, Paid/Organic, Channel) now has an explicit mix-check: compute mix_effect vs conversion_effect; if mix dominates exit as routing story at that level, if conversion dominates fix the segment and descend. Two transcript declaration forms added (conversion path vs routing exit). |

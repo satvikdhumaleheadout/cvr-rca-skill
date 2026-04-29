@@ -200,13 +200,15 @@ write one line in the detail section explaining why. Do not descend further.
 Read `summary.json` and extract all three orientation signals at once. These
 three signals are read simultaneously — they are not a sequential gate.
 
-**Signal 1 — mix_dominance (routing vs conversion)**
+**Signal 1 — mix_dominance (preliminary orientation)**
 
-Check `mix_dominance.is_dominant`. If true, the primary story is traffic
-composition: MB/HO share or channel mix shifted enough to explain the drop
-without any funnel step breaking. The investigation pivots to "where and why
-did traffic shift" rather than "which step broke". If false, the drop is a
-conversion problem — continue to shapley.
+Check `mix_dominance.is_dominant` as a first read. If true, the L1 cascade
+is likely to find a mix exit early — be prepared for a routing story. If
+false, the cascade is likely to confirm conversion changes at all levels.
+
+This is orientation only — not a gate. The L1 cascade is what actually
+determines whether the story is routing or conversion, and at which level.
+Do not skip the cascade based on this signal alone.
 
 See `context.md` → "MB vs HO" and "Channels" for what mix signals mean.
 
@@ -241,28 +243,36 @@ See `context.md` → "Q3 Trend Interpretation" for full interpretation guide.
 
 ---
 
-### L1 — Mix cascade (always first, before any funnel hypotheses)
+### L1 — Mix cascade (routing vs conversion determination)
 
-Before forming any hypothesis about LP2S / S2C / C2O, run the mix cascade to
-fix the primary segment. This is mandatory — running funnel analysis on the
-full CE mixes cohorts with very different base CVRs and produces noisy findings.
+Run the cascade before any funnel step analysis. It runs three levels. At each
+level, determine whether the change is a **mix change** (traffic composition
+shifted → routing story, exit here) or a **conversion change** (rates declined
+within the segment → fix it, descend to next level).
 
-**Step 1 — MB vs HO:** Read from `summary.json` (no query needed).
-**Step 2 — Paid vs organic within primary brand:** Run Level 2 query.
-**Step 3 — Channel breakdown within paid:** Run Level 3 query (if paid is primary).
+**Level 1 — MB vs HO** (from `summary.json`, no query needed)
+Compare mix_effect vs conversion_effect for MB and HO.
+- Mix exit → investigate why HO traffic fell or MB grew (routing story)
+- Conversion → fix dominant brand, run Level 2
 
-Full query templates and the decision rule for fixing each level are in
-`context.md` → "Mix Cascade — Fixing the Primary Segment".
+**Level 2 — Paid vs Organic within fixed brand** (BQ query)
+Compare mix_effect vs conversion_effect for Paid vs Organic.
+- Mix exit → investigate why paid/organic share shifted (campaign paused, budget cut)
+- Conversion → fix dominant type (almost always Paid), run Level 3
 
-Once the cascade is done, declare the fixed segment in the transcript:
+**Level 3 — Channel breakdown within Paid** (BQ query)
+Compare mix_effect vs conversion_effect per paid channel.
+- Mix exit → investigate why budget or impression share shifted between channels
+- Conversion → fix dominant channel (e.g., Google Search) — this is the fixed segment
 
-```
-Fixed segment: [MB/HO] · [Paid/Organic] · [channel if applicable]
-Filters for all subsequent queries: AND is_microbrand_page = ... AND channel_name = ...
-```
+Full query templates, the mix vs conversion test, and the decision rule are in
+`context.md` → "Mix Cascade — Routing vs Conversion Determination".
 
-Log the cascade in the tree map as its own L1 batch, then add the fixed segment
-declaration as a persistent note before L2 branches open.
+Declare the outcome in the transcript before opening any funnel branches:
+- Conversion path: `Fixed segment: [MB/HO] · [Paid/Organic] · [channel]` + filters
+- Routing exit: `Mix change at Level [X] — [reason]` + investigation direction
+
+Log the cascade as its own L1 section in the tree map.
 
 ### L2+ — Branch and descend (all queries filtered to fixed segment)
 
@@ -508,4 +518,5 @@ catches it earlier next time, rather than adding more loops within the skill.
 | c017 | 2026-04-29 | Mix cascade redesigned as mandatory L1 step: three levels (MB/HO → Paid/Organic → Channel within Paid). Fixed segment declared from cascade results; all L2+ funnel queries carry the fixed segment filters. L1 and L2+ steps renamed in Step 2 accordingly. context.md gains full Mix Cascade section with three query templates, decision rule, and fixed segment declaration template. report_structure.md gains Fixed Segment banner HTML spec and updated 90-day chart spec (weekly ticks + LY data guard). |
 | c018 | 2026-04-29 | L2+ section rewritten to make hypothesis generation self-extending: context.md patterns are explicitly the default *starting set*, not an exhaustive list. Results themselves generate the next hypothesis. Four result types defined: Confirms, Rules out, Concentrates, and Surprises (the last being new — an unexpected result generates a new branch even if not on the default list). "Investigation ends at the leaf, not at list exhaustion" stated explicitly. context.md Common Investigation Patterns header rewritten to match — replaces weak "not rails" disclaimer with explicit loop logic and three common reasons a list runs out before a leaf is reached. |
 | c019 | 2026-04-29 | Removed "write 2–4 specific, falsifiable hypotheses" from L2+ — this was a leftover artifact from the old Q1/Q2/Q3 model that contradicted the tree structure. L2+ now opens branches from the context.md default set and grows them level-by-level from what the data shows. Branches are not a fixed upfront list. |
+| c021 | 2026-04-29 | Mix cascade repositioned as the routing vs conversion determination (not a blind segment-fixer). L1 section rewritten with three explicit levels, each with a mix exit condition (mix change → routing story) and a conversion path (fix segment, descend). L0 Signal 1 downgraded from a hard gate to an orientation hint — the cascade, not mix_dominance alone, determines the path. hypothesis.md L0 routing table updated to show cascade exits as the first rows, with Shapley rows applying only after a conversion-path cascade. |
 | c020 | 2026-04-29 | Updated file role descriptions: context.md no longer owns "investigation patterns"; hypothesis.md described as two-level branch reference (L0 routing + first-pass branch sets + historical patterns). L2+ pointer updated from context.md to hypothesis.md. |
