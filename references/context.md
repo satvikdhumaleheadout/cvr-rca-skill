@@ -239,15 +239,17 @@ SELECT
     WHEN event_date BETWEEN '{{PRE_START}}' AND '{{PRE_END}}' THEN 'pre'
     ELSE 'post'
   END AS period,
-  COUNT(DISTINCT user_id)                                                       AS users_lp,
-  SAFE_DIVIDE(COUNTIF(has_select_page_viewed), COUNT(DISTINCT user_id))        AS lp2s,
-  SAFE_DIVIDE(COUNTIF(has_checkout_started),   COUNTIF(has_select_page_viewed)) AS s2c,
-  SAFE_DIVIDE(COUNTIF(has_order_completed),    COUNTIF(has_checkout_started))   AS c2o,
-  SAFE_DIVIDE(COUNTIF(has_order_completed),    COUNT(DISTINCT user_id))         AS cvr
+  COUNT(DISTINCT user_id)                                                                                    AS users_lp,
+  SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN has_select_page_viewed THEN user_id END), COUNT(DISTINCT user_id))   AS lp2s,
+  SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN has_checkout_started  THEN user_id END), COUNT(DISTINCT CASE WHEN has_select_page_viewed THEN user_id END)) AS s2c,
+  SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN has_order_completed   THEN user_id END), COUNT(DISTINCT CASE WHEN has_checkout_started  THEN user_id END)) AS c2o,
+  SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN has_order_completed   THEN user_id END), COUNT(DISTINCT user_id))   AS cvr
 FROM `headout-analytics.analytics_reporting.mixpanel_user_page_funnel_progression`
 WHERE combined_entity_id = '{{CE_ID}}'
   AND event_date BETWEEN '{{PRE_START}}' AND '{{POST_END}}'
   AND is_microbrand_page = {{IS_MB}}          -- fixed from Level 1
+  AND (advertising_channel_type IS NULL
+       OR advertising_channel_type != 'PERFORMANCE_MAX')
 GROUP BY 1, 2
 ORDER BY 1, 2
 ```
@@ -271,11 +273,11 @@ SELECT
     WHEN event_date BETWEEN '{{PRE_START}}' AND '{{PRE_END}}' THEN 'pre'
     ELSE 'post'
   END AS period,
-  COUNT(DISTINCT user_id)                                                       AS users_lp,
-  SAFE_DIVIDE(COUNTIF(has_select_page_viewed), COUNT(DISTINCT user_id))        AS lp2s,
-  SAFE_DIVIDE(COUNTIF(has_checkout_started),   COUNTIF(has_select_page_viewed)) AS s2c,
-  SAFE_DIVIDE(COUNTIF(has_order_completed),    COUNTIF(has_checkout_started))   AS c2o,
-  SAFE_DIVIDE(COUNTIF(has_order_completed),    COUNT(DISTINCT user_id))         AS cvr
+  COUNT(DISTINCT user_id)                                                                                    AS users_lp,
+  SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN has_select_page_viewed THEN user_id END), COUNT(DISTINCT user_id))   AS lp2s,
+  SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN has_checkout_started  THEN user_id END), COUNT(DISTINCT CASE WHEN has_select_page_viewed THEN user_id END)) AS s2c,
+  SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN has_order_completed   THEN user_id END), COUNT(DISTINCT CASE WHEN has_checkout_started  THEN user_id END)) AS c2o,
+  SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN has_order_completed   THEN user_id END), COUNT(DISTINCT user_id))   AS cvr
 FROM `headout-analytics.analytics_reporting.mixpanel_user_page_funnel_progression`
 WHERE combined_entity_id = '{{CE_ID}}'
   AND event_date BETWEEN '{{PRE_START}}' AND '{{POST_END}}'
@@ -283,9 +285,56 @@ WHERE combined_entity_id = '{{CE_ID}}'
   AND channel_name IN (
     'Google Ads', 'Microsoft Ads', 'Facebook Ads (Meta)', 'Affiliates'
   )                                           -- paid only, fixed from Level 2
+  AND (advertising_channel_type IS NULL
+       OR advertising_channel_type != 'PERFORMANCE_MAX')
 GROUP BY 1, 2
 ORDER BY 1, 2
 ```
+
+### Computing mix_effect and conversion_effect from query results
+
+After running the Level 2 or Level 3 query, compute the effects explicitly in
+the transcript. Do not skip this arithmetic — the decision to exit or fix is
+based on these numbers, and they must appear in the report.
+
+**Step-by-step from query output:**
+
+1. For each segment, compute its share of total users in pre and post:
+   `share_pre = users_pre / total_users_pre`
+   `share_post = users_post / total_users_post`
+
+2. Compute the deltas:
+   `Δshare = share_post − share_pre`
+   `Δrate  = cvr_post  − cvr_pre`
+
+3. Compute the effects:
+   `mix_effect        = Δshare × cvr_pre`   (what CVR change is explained by composition shift)
+   `conversion_effect = share_pre × Δrate`  (what CVR change is explained by rate decline)
+
+4. Sum across segments. The dominant term is the story.
+
+**Worked example — Level 3 Channel breakdown:**
+
+Query returns:
+
+| channel_name | period | users_lp | cvr |
+|---|---|---|---|
+| Google Ads | pre | 12,000 | 4.2% |
+| Google Ads | post | 9,800 | 3.1% |
+| Microsoft Ads | pre | 3,000 | 4.0% |
+| Microsoft Ads | post | 2,900 | 3.9% |
+
+Arithmetic:
+- Total pre users = 15,000 · Total post users = 12,700
+- Google Ads share_pre = 80% · share_post = 77% · Δshare = −3% · Δrate = −1.1pp
+  → mix_effect = −3% × 4.2% = −0.13pp · conversion_effect = 80% × −1.1pp = −0.88pp
+- Microsoft Ads share_pre = 20% · share_post = 23% · Δshare = +3% · Δrate = −0.1pp
+  → mix_effect = +3% × 4.0% = +0.12pp · conversion_effect = 20% × −0.1pp = −0.02pp
+
+Sum: conversion_effect = −0.90pp · mix_effect ≈ −0.01pp → **conversion dominates** → fix Google Ads.
+
+Log this arithmetic block in the transcript before the fix declaration. It is
+also the source for the cascade table in the report (see report_structure.md).
 
 ### Decision rule for fixing (conversion path)
 
@@ -502,6 +551,43 @@ WHERE combined_entity_id = '<ce_id>'
   AND (advertising_channel_type IS NULL
        OR advertising_channel_type != 'PERFORMANCE_MAX')
 ```
+
+**L2+ query pattern — fixed segment applied (canonical reference)**
+
+Every L2+ query carries the fixed segment filters from the cascade declaration.
+The segment never changes within a single investigation. Swap the dimension in
+SELECT and GROUP BY to test any cut (language, device_type, experience_id,
+page_url, etc.). Focus on whichever rate Shapley identified as the primary
+driver — the others are context.
+
+```sql
+SELECT
+    <dimension>,                          -- swap: language / device_type / experience_id / page_url / etc.
+    CASE
+        WHEN event_date BETWEEN '<PRE_START>' AND '<PRE_END>' THEN 'pre'
+        ELSE 'post'
+    END AS period,
+    COUNT(DISTINCT user_id)                                                                                    AS users_lp,
+    SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN has_select_page_viewed THEN user_id END), COUNT(DISTINCT user_id))   AS lp2s,
+    SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN has_checkout_started  THEN user_id END), COUNT(DISTINCT CASE WHEN has_select_page_viewed THEN user_id END)) AS s2c,
+    SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN has_order_completed   THEN user_id END), COUNT(DISTINCT CASE WHEN has_checkout_started  THEN user_id END)) AS c2o,
+    SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN has_order_completed   THEN user_id END), COUNT(DISTINCT user_id))   AS cvr
+
+FROM `headout-analytics.analytics_reporting.mixpanel_user_page_funnel_progression`
+
+WHERE combined_entity_id = '<CE_ID>'
+  AND event_date BETWEEN '<PRE_START>' AND '<POST_END>'
+  AND (advertising_channel_type IS NULL
+       OR advertising_channel_type != 'PERFORMANCE_MAX')
+  AND is_microbrand_page = <TRUE|FALSE>  -- fixed from cascade Level 1 (MB or HO)
+  AND channel_name = '<channel>'         -- fixed from cascade Level 3 (e.g. 'Google Ads')
+
+GROUP BY 1, 2
+ORDER BY 1, 2
+```
+
+The two annotated lines are the fixed segment. Everything else is the same
+query regardless of which funnel step or dimension you are investigating.
 
 ---
 
@@ -849,6 +935,110 @@ Query when the drop might be geographically concentrated. A CVR drop entirely
 in one market (e.g., United Kingdom) points to geo-specific pricing, a campaign
 pause, or a local supply issue rather than a platform-wide problem.
 
+### Geo vs Non-Geo (home market vs international visitors)
+
+Query when you want to understand whether a funnel drop is concentrated among **local users** (browsing from the CE's home country) or **international visitors**. This collapses the full country breakdown into three buckets: home market (Geo), all other countries (Non-Geo), and unresolved origin (Unknown) — and measures LP2S, S2C, and C2O separately for each.
+
+**When to use:** Run this as a parallel cut alongside language and device when the CE is in a high-domestic-demand market (e.g., Italy, France, Japan) and you suspect different dynamics between local and international visitors. Geo users typically have shorter lead times, different price sensitivity, and may arrive via different channels than international tourists. A drop concentrated in Geo suggests a local pricing, supply, or campaign issue; a drop in Non-Geo points toward international traffic quality, language/UX gaps, or international supply.
+
+**Pre-step — look up the CE's home country before running the query:**
+
+```sql
+SELECT DISTINCT country
+
+FROM `headout-analytics.analytics_reporting.dim_experiences`
+
+WHERE combined_entity_id = '<ce_id>'
+    AND country IS NOT NULL
+
+LIMIT 1
+```
+
+Use `dim_experiences.country`, not `dim_combined_entities.country` — the latter can be NULL for sheet-only CEs. `dim_experiences.country` is always populated via `dim_cities`.
+
+**Country-level breakdown query (apply fixed segment filters from cascade):**
+
+The query returns the top 5 countries by combined pre+post volume, always including the home country regardless of its rank. Each row is tagged with `geo_segment` so Geo vs Non-Geo is still immediately readable in the output.
+
+```sql
+WITH funnel_data AS (
+
+    SELECT
+        COALESCE(browsing_country, 'Unknown') AS browsing_country,
+        CASE
+            WHEN browsing_country = '<CE_COUNTRY>' THEN 'Geo'
+            WHEN browsing_country IS NULL          THEN 'Unknown'
+            ELSE                                        'Non-Geo'
+        END AS geo_segment,
+        CASE
+            WHEN event_date BETWEEN '<PRE_START>' AND '<PRE_END>' THEN 'pre'
+            ELSE 'post'
+        END AS period,
+        user_id,
+        has_select_page_viewed,
+        has_checkout_started,
+        has_order_completed
+
+    FROM `headout-analytics.analytics_reporting.mixpanel_user_page_funnel_progression`
+
+    WHERE combined_entity_id = '<CE_ID>'
+        AND event_date BETWEEN '<PRE_START>' AND '<POST_END>'
+        AND (advertising_channel_type IS NULL
+             OR advertising_channel_type != 'PERFORMANCE_MAX')
+        AND is_microbrand_page = <TRUE|FALSE>  -- fixed from cascade Level 1
+        AND channel_name = '<channel>'         -- fixed from cascade Level 3
+
+),
+
+country_totals AS (
+
+    SELECT
+        browsing_country,
+        COUNT(DISTINCT user_id)                                    AS total_users,
+        ROW_NUMBER() OVER (ORDER BY COUNT(DISTINCT user_id) DESC)  AS country_rank
+
+    FROM funnel_data
+
+    GROUP BY 1
+
+)
+
+SELECT
+    f.browsing_country,
+    f.geo_segment,
+    f.period,
+    COUNT(DISTINCT f.user_id)                                                                                      AS users_lp,
+    SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN f.has_select_page_viewed THEN f.user_id END), COUNT(DISTINCT f.user_id)) AS lp2s,
+    SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN f.has_checkout_started  THEN f.user_id END), COUNT(DISTINCT CASE WHEN f.has_select_page_viewed THEN f.user_id END)) AS s2c,
+    SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN f.has_order_completed   THEN f.user_id END), COUNT(DISTINCT CASE WHEN f.has_checkout_started  THEN f.user_id END)) AS c2o,
+    SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN f.has_order_completed   THEN f.user_id END), COUNT(DISTINCT f.user_id)) AS cvr
+
+FROM funnel_data AS f
+INNER JOIN country_totals AS ct USING (browsing_country)
+
+WHERE ct.country_rank <= 5
+    OR f.geo_segment = 'Geo'       -- home country always included regardless of rank
+
+GROUP BY f.browsing_country, f.geo_segment, f.period, ct.total_users
+
+ORDER BY
+    CASE f.geo_segment WHEN 'Geo' THEN 0 WHEN 'Non-Geo' THEN 1 ELSE 2 END,
+    ct.total_users DESC,
+    f.period
+```
+
+**Interpreting results:**
+
+- **Geo row:** the home country. If its rate dropped while Non-Geo countries held, the issue is domestic — local supply, pricing, or campaign change. Cross-check with the `language` cut using the local language.
+- **Non-Geo rows (top countries by volume):** each shows a specific international market. A drop concentrated in one or two countries points to a market-specific cause (geo campaign change, language/UX gap, international supply shortfall). A broad decline across all Non-Geo countries suggests a platform-wide or product issue affecting everyone outside the home market.
+- **`Unknown` row:** appears in output only if its volume reaches the top 5. Treat as a data-quality flag — do not read its rate as evidence for or against a geo hypothesis.
+- **Home country already in top 5:** it will appear once with `geo_segment = 'Geo'`, matching both the rank ≤ 5 and the home country condition simultaneously.
+
+**Cross-dimensional intersections to run if a country shows a signal:**
+
+- `country × language` — confirms whether a market-specific drop is language-driven (e.g., French users on French-language pages vs English pages)
+- `country × experience_id` — if an international market drops on specific experiences, check whether those experiences have language-appropriate guided variants with available inventory
+
 ### `channel_name` (granular channel)
 
 Query when the paid/organic channel mix is shifting but you need to know which
@@ -930,6 +1120,8 @@ thinking and makes the inference scannable.
 | c006 | 2026-04-29 | Added "Mix Cascade — Fixing the Primary Segment" section: full three-level cascade (Level 1 MB/HO from summary.json, Level 2 Paid/Organic custom BQ query, Level 3 Channel breakdown within Paid). Includes decision rule for when to fix a level, fixed segment declaration template, and filter strings to carry into all subsequent L2+ queries. |
 | c007 | 2026-04-29 | Expanded investigation patterns for all three funnel steps: (1) LP2S gains three-tier triage — dimension cuts first (parallel batch), then pricing if no concentration, then sessions as fallback — plus explicit "page URL is the target output" instruction once a dimension concentrates. (2) S2C gains language × S2C and device × S2C as first-pass cuts before experience-level; page URL endpoint added for language/device locus path; broad-drop fallback added. (3) C2O expanded with four C2A hypotheses (pax availability, price friction, UX change, sessions) and three A2O hypotheses (gateway, fraud, live inventory sync) with DRIs named for each. L0 branch map updated: S2C row adds language and device branches (d) and (e). |
 | c008 | 2026-04-29 | Common Investigation Patterns header rewritten: "not rails" disclaimer replaced with explicit hypothesis loop logic — patterns are the default starting set, results generate the next hypothesis, investigation ends at the leaf not at list exhaustion. Three common reasons a list runs out before a leaf is reached added (cross-cut not yet tested, finer grain not yet drilled, cause is in a different table). |
-| c006 | 2026-04-28 | Fixed critical join-path bug in `inventory_availability` schema: removed non-existent `experience_id` column; corrected `tour_id` note to reference `dim_tours` as the bridge. Fixed lead-time bucket query: replaced `ce_experiences` CTE (which incorrectly selected `tour_id` from `dim_experiences`) with `ce_tours` CTE using the correct two-hop join `dim_experiences → dim_tours → inventory_availability`. |
+| c011 | 2026-04-29 | Fixed critical join-path bug in `inventory_availability` schema: removed non-existent `experience_id` column; corrected `tour_id` note to reference `dim_tours` as the bridge. Fixed lead-time bucket query: replaced `ce_experiences` CTE (which incorrectly selected `tour_id` from `dim_experiences`) with `ce_tours` CTE using the correct two-hop join `dim_experiences → dim_tours → inventory_availability`. |
+| c012 | 2026-05-04 | Fixed COUNTIF vs COUNT(DISTINCT) mismatch in Level 2, Level 3, and L2+ queries — funnel table fans out rows when a user selects multiple experiences per session, causing COUNTIF numerators to exceed COUNT(DISTINCT user_id) denominators and produce rates > 1.0. All three queries now use COUNT(DISTINCT CASE WHEN has_X THEN user_id END) consistently with the Standard CVR query pattern. Added missing PERFORMANCE_MAX filter to Level 2 and Level 3 cascade queries. |
 | c009 | 2026-04-29 | Moved "Investigation tree — L0 to L1 branch map" and "Common Investigation Patterns" to hypothesis.md — these are hypothesis logic, not business context. context.md now owns business vocabulary, table schemas, analytical concepts, and query rules only. |
 | c010 | 2026-04-29 | Mix Cascade redesigned as routing vs conversion determination. Each of the three levels (MB/HO, Paid/Organic, Channel) now has an explicit mix-check: compute mix_effect vs conversion_effect; if mix dominates exit as routing story at that level, if conversion dominates fix the segment and descend. Two transcript declaration forms added (conversion path vs routing exit). |
+| c013 | 2026-05-04 | Added "Geo vs Non-Geo" dimension under "Dimensions to Query and When": pre-step CE country lookup via `dim_experiences.country` (not `dim_combined_entities.country` which can be NULL), country-level breakdown query returning top 5 countries by combined pre+post volume with home country always included, `geo_segment` label (Geo/Non-Geo/Unknown) on each row, and interpretation guide for per-country signals and cross-dimensional intersections (country × language, country × experience_id). |

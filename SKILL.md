@@ -214,13 +214,14 @@ See `context.md` → "MB vs HO" and "Channels" for what mix signals mean.
 
 **Signal 2 — shapley (which step is the story)**
 
-Check `shapley`. Identify which step(s) carry the majority of ΔCVR. The entire
-investigation is anchored to those steps. Do not deep-dive steps that carry
+Check `shapley`. Note which step(s) carry the majority of ΔCVR — this will
+direct L2+ branches after the cascade determines the fixed segment. Do not
+open funnel queries yet; that comes after L1. Do not deep-dive steps that carry
 less than ~10% of the delta — even if a rate change is visible there, it is not
 the driver.
 
 See `hypothesis.md` → "L0 signal → first branches to open" for how each
-shapley outcome opens specific L1 branches.
+shapley outcome maps to L2+ branch sets (used after the cascade, not before).
 
 **Signal 3 — trend_context (timing and seasonal calibration)**
 
@@ -245,10 +246,12 @@ See `context.md` → "Q3 Trend Interpretation" for full interpretation guide.
 
 ### L1 — Mix cascade (routing vs conversion determination)
 
-Run the cascade before any funnel step analysis. It runs three levels. At each
-level, determine whether the change is a **mix change** (traffic composition
-shifted → routing story, exit here) or a **conversion change** (rates declined
-within the segment → fix it, descend to next level).
+Run the cascade now — before opening any LP2S, S2C, or C2O branches. The
+cascade has three levels. At each level, determine whether the change is a
+**mix change** (traffic composition shifted → routing story, exit here) or a
+**conversion change** (rates declined within the segment → fix it, descend to
+the next level). The fixed segment produced by completing all three levels is
+the filter that every subsequent funnel query carries.
 
 **Level 1 — MB vs HO** (from `summary.json`, no query needed)
 Compare mix_effect vs conversion_effect for MB and HO.
@@ -270,16 +273,20 @@ Full query templates, the mix vs conversion test, and the decision rule are in
 
 Declare the outcome in the transcript before opening any funnel branches:
 - Conversion path: `Fixed segment: [MB/HO] · [Paid/Organic] · [channel]` + filters
-- Routing exit: `Mix change at Level [X] — [reason]` + investigation direction
+- Routing exit: `Mix change at Level [X] — [reason]`. Then follow the routing
+  exit investigation path in `hypothesis.md` → "Mix — first-pass branches" for
+  that exit level (timing → sub-segment cut → URL impact → declare).
 
 Log the cascade as its own L1 section in the tree map.
 
 ### L2+ — Branch and descend (all queries filtered to fixed segment)
 
-With the segment fixed and the primary funnel step identified from Shapley,
-open L2 branches. Each branch is a specific, falsifiable hypothesis about why
-that funnel step dropped in the fixed segment. Every query from this point
-carries the fixed segment filters.
+The cascade is complete and the fixed segment is declared. Now use the Shapley
+step identified at L0 to direct the first set of branches. Open L2 branches
+for the primary funnel step only — LP2S if LP2S dominated, S2C if S2C
+dominated, C2O if C2O dominated. Every query from this point carries the fixed
+segment filters. Each branch is a specific, falsifiable hypothesis about why
+that funnel step dropped in the fixed segment.
 
 A branch is a hypothesis, not an observation. Name the mechanism, the segment
 or experience, and the pattern you would expect if it were true:

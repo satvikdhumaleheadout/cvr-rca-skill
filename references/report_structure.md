@@ -558,6 +558,141 @@ Do not show separate tables for dimensions that produced no signal. The ruled-ou
 
 ---
 
+### Mix cascade analysis block
+
+Render one `.analysis-block` for the cascade — three sub-tables inside it,
+one per level. Each table shows the mix_effect vs conversion_effect arithmetic
+explicitly so the reader can verify the routing-vs-conversion decision.
+
+The verdict line states the overall cascade outcome. Each sub-table has its own
+one-line finding. Highlight the fixed segment row with `.highlight-row`.
+
+```html
+<div class="analysis-block">
+  <div class="block-title">Mix Cascade — Routing vs Conversion Determination</div>
+  <div class="verdict-line">
+    <!-- Use ONE of these: -->
+    Conversion change at all levels — no routing story. Fixed segment: [MB/HO] · [Paid/Organic] · [Channel].
+    <!-- OR: -->
+    Routing story — mix change detected at Level [1/2/3]. [One-line reason.]
+  </div>
+
+  <!-- Level 1: MB vs HO -->
+  <p style="font-size:12px;font-weight:600;margin:16px 0 6px;">Level 1 — MB vs HO</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Segment</th>
+        <th class="num">Pre users</th><th class="num">Post users</th>
+        <th class="num">Pre share</th><th class="num">Post share</th>
+        <th class="num">Pre CVR</th><th class="num">Post CVR</th>
+        <th class="num">Mix effect</th><th class="num">Conv. effect</th>
+        <th>Verdict</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="highlight-row">  <!-- highlight the fixed / dominant segment -->
+        <td>[MB / HO]</td>
+        <td class="num">[n]</td><td class="num">[n]</td>
+        <td class="num">[x%]</td><td class="num">[x%]</td>
+        <td class="num">[x%]</td><td class="num">[x%]</td>
+        <td class="num">[±x.xxpp]</td><td class="num">[±x.xxpp]</td>
+        <td>Fixed — conversion dominates</td>
+      </tr>
+      <tr>
+        <td>[MB / HO]</td>
+        <td class="num">[n]</td><td class="num">[n]</td>
+        <td class="num">[x%]</td><td class="num">[x%]</td>
+        <td class="num">[x%]</td><td class="num">[x%]</td>
+        <td class="num">[±x.xxpp]</td><td class="num">[±x.xxpp]</td>
+        <td>—</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Level 2: Paid vs Organic -->
+  <p style="font-size:12px;font-weight:600;margin:16px 0 6px;">Level 2 — Paid vs Organic (within [MB/HO])</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Segment</th>
+        <th class="num">Pre users</th><th class="num">Post users</th>
+        <th class="num">Pre share</th><th class="num">Post share</th>
+        <th class="num">Pre CVR</th><th class="num">Post CVR</th>
+        <th class="num">Mix effect</th><th class="num">Conv. effect</th>
+        <th>Verdict</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="highlight-row">
+        <td>Paid</td>
+        <td class="num">[n]</td><td class="num">[n]</td>
+        <td class="num">[x%]</td><td class="num">[x%]</td>
+        <td class="num">[x%]</td><td class="num">[x%]</td>
+        <td class="num">[±x.xxpp]</td><td class="num">[±x.xxpp]</td>
+        <td>Fixed — conversion dominates</td>
+      </tr>
+      <tr>
+        <td>Organic</td>
+        <td class="num">[n]</td><td class="num">[n]</td>
+        <td class="num">[x%]</td><td class="num">[x%]</td>
+        <td class="num">[x%]</td><td class="num">[x%]</td>
+        <td class="num">[±x.xxpp]</td><td class="num">[±x.xxpp]</td>
+        <td>—</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Level 3: Channel breakdown within Paid -->
+  <p style="font-size:12px;font-weight:600;margin:16px 0 6px;">Level 3 — Channel breakdown within Paid</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Channel</th>
+        <th class="num">Pre users</th><th class="num">Post users</th>
+        <th class="num">Pre share</th><th class="num">Post share</th>
+        <th class="num">Pre CVR</th><th class="num">Post CVR</th>
+        <th class="num">Mix effect</th><th class="num">Conv. effect</th>
+        <th>Verdict</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- One row per paid channel (Google Ads, Microsoft Ads, Facebook Ads, Affiliates).
+           highlight-row on the fixed channel. -->
+      <tr class="highlight-row">
+        <td>Google Ads</td>
+        <td class="num">[n]</td><td class="num">[n]</td>
+        <td class="num">[x%]</td><td class="num">[x%]</td>
+        <td class="num">[x%]</td><td class="num">[x%]</td>
+        <td class="num">[±x.xxpp]</td><td class="num">[±x.xxpp]</td>
+        <td>Fixed — conversion dominates</td>
+      </tr>
+      <tr>
+        <td>Microsoft Ads</td>
+        <td class="num">[n]</td><td class="num">[n]</td>
+        <td class="num">[x%]</td><td class="num">[x%]</td>
+        <td class="num">[x%]</td><td class="num">[x%]</td>
+        <td class="num">[±x.xxpp]</td><td class="num">[±x.xxpp]</td>
+        <td>—</td>
+      </tr>
+      <!-- add rows for Facebook Ads, Affiliates as applicable -->
+    </tbody>
+  </table>
+
+  <p style="font-size:13px;color:#555;margin-top:12px;">
+    [One paragraph: what the cascade found, which level fixed which segment,
+     and why this is a conversion story (or routing story if applicable).
+     Do not repeat the numbers — the tables carry them.]
+  </p>
+</div>
+```
+
+**If the cascade exited at a mix level:** render only the levels up to and
+including the exit level. The exit level's verdict cell reads "Mix exit —
+routing story". Do not render subsequent levels (they were not run).
+
+---
+
 ### Fixed Segment banner
 
 After the mix cascade concludes, declare the fixed segment once at the top of the analysis section — before the Shapley block. This banner tells the reader that all funnel data below is scoped to one coherent cohort.

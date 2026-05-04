@@ -67,13 +67,74 @@ Common reasons the list runs out before a leaf is found:
 - The cause is outside the funnel table entirely (pricing, availability, a
   campaign event) and needs a separate query against a different table
 
-### Mix — first-pass branches
+### Mix — first-pass branches (routing exit investigation)
 
-Write a query: `COUNT(DISTINCT user_id)` by `page_url` pre vs post for the
-affected segment (MB or the channel that shifted). Which URLs gained or lost
-volume? If a paid campaign was serving specific collection pages in the pre
-period and stopped, those pages will show a sharp traffic drop. That is the
-finding. Marketing owns it.
+A routing exit means traffic composition shifted at one of three levels. The
+investigation after the exit is different at each level — the question is always
+the same ("why did the mix change?") but the cut and the stakeholder differ.
+
+**Level 1 exit — HO vs MB share shifted**
+
+Tier 1 — Time the shift: query HO vs MB session volumes by week over the 90-day
+window. Identify the exact week HO share started declining (or MB share growing).
+That week is the anchor for everything below.
+
+Tier 2 — Source cut: within HO sessions, break by `language` or `country_code`
+pre vs post. A single language or market dropping points to a geo-specific
+campaign or partnership change. A broad drop across all HO markets points to a
+global organic or referral change.
+
+Tier 3 — URL impact: query `COUNT(DISTINCT user_id)` by `page_url` for HO
+sessions pre vs post. Which collection or experience pages lost HO traffic?
+Those are the specific pages Marketing needs to look at.
+
+Declare: "HO traffic dropped [X%] starting [week]. Concentrated in [language /
+market]. Affected pages: [top URLs by volume loss]. Marketing investigation
+needed — conversion rates within HO were flat."
+
+---
+
+**Level 2 exit — Paid vs Organic share shifted within fixed brand**
+
+Tier 1 — Time the shift: query Paid vs Organic session volumes by week. When
+did paid share drop? A sharp drop on a specific date suggests a campaign pause
+or budget exhaustion. A gradual drop suggests budget reallocation or bid
+strategy drift.
+
+Tier 2 — Channel cut: within Paid sessions, break by `channel` (Google Ads,
+Meta, etc.) pre vs post. Which paid channel declined? This narrows the
+investigation to a specific campaign team or channel budget.
+
+Tier 3 — URL impact: query `COUNT(DISTINCT user_id)` by `page_url` for the
+declining paid channel pre vs post. Which landing pages did the campaign stop
+serving traffic to?
+
+Declare: "Paid traffic dropped [X%] starting [date]. Channel: [X]. Affected
+pages: [top URLs]. Marketing owns — conversion rates within Paid were flat."
+
+---
+
+**Level 3 exit — Channel share shifted within Paid**
+
+Tier 1 — Time the shift: query session volumes by channel within Paid, by week.
+Which channel gained and which lost? If Google Search lost and Performance Max
+gained, that is a bid strategy shift. If Meta dropped sharply, that is a budget
+or creative rotation event.
+
+Tier 2 — URL impact: query `COUNT(DISTINCT user_id)` by `page_url` for the
+losing channel pre vs post. Which specific listing or collection pages were that
+channel's primary landing pages? Those are what dropped.
+
+Declare: "[Channel A] lost [X%] impression share to [Channel B] starting
+[week]. Affected pages: [top URLs]. Conversion rates within [Channel A] were
+flat — this is a spend/allocation story, not a product story."
+
+---
+
+For all three levels: the finding is complete when you can name the shift week,
+the specific sub-segment that drove it, and the affected page URLs. Do not go
+further into funnel analysis — the conversion rates within the affected segment
+were flat (that is why the cascade exited). Marketing owns the routing story.
 
 ### LP2S — first-pass branches
 
@@ -89,8 +150,23 @@ select page. Work through three tiers in order — don't skip ahead.
   to browse-level friction
 - `experience_id` × LP2S rate — a drop in a few specific experiences points to
   listing quality, price, or availability visible on the listing
+- `browsing_country` (Geo/Non-Geo) × LP2S rate — a Geo-only drop points to a
+  local pricing, supply, or campaign issue; a drop concentrated in one or two
+  Non-Geo countries points to an international traffic quality or UX gap. Use
+  the dedicated query from `context.md → "Geo vs Non-Geo"` — it requires a
+  CE country pre-step and top-5 CTE logic; do not use the canonical L2+ query
+  for this cut.
 
 **If a dimension concentrates:** run the intersection (e.g., French × mobile), then drill to `page_url` within that segment. The page URL is the target output — it is what the stakeholder needs to act on. A finding is not complete until you can say "these specific URLs are where LP2S dropped, here are the user counts."
+
+**If country concentrates:**
+- Geo drop → cross-cut with `language` using the local language (e.g., Italian
+  for CE in Italy). A Geo × local-language drop confirms a domestic audience
+  issue. Then drill to `page_url` within that segment.
+- Non-Geo country drop → cross-cut with `experience_id` for that country. If
+  specific experiences show the drop, check whether those experiences have
+  language-appropriate variants and available inventory for international
+  booking windows.
 
 **Tier 2 — If no dimension concentrates (drop is CE-wide and flat across cuts):**
 Run pricing analysis — `final_price_usd` from `product_rankings_features` pre vs post for top experiences. Did prices increase, and does the timing align with the LP2S drop? A CE-wide price uplift will depress LP2S broadly with no dimension cut showing concentration.
@@ -113,8 +189,22 @@ Work through two tiers in order.
   to a supply or pricing issue for those products. When you find this, also pull
   `count_days_available_30d` from `product_rankings_features` for those
   experiences to confirm availability is the mechanism.
+- `browsing_country` (Geo/Non-Geo) × S2C rate — a Geo-only S2C drop points to
+  local supply scarcity or a pricing shock visible at the variant-selection step
+  for domestic users; a Non-Geo country drop points to language/UX friction at
+  the date-picker or international inventory gaps. Use the dedicated query from
+  `context.md → "Geo vs Non-Geo"` for this cut.
 
 **If language or device concentrates:** drill to the intersection (language × device if both signal), then to `page_url` within that segment. The URL is the actionable endpoint — give the stakeholder the specific select-page URLs and user counts.
+
+**If country concentrates:**
+- Geo drop → cross-cut with `language` (local language) and `experience_id`.
+  A Geo + local-language + specific-experience triple confirms domestic supply
+  or pricing as the mechanism — lead-time bucket query is the next step.
+- Non-Geo country drop → cross-cut with `experience_id` for that country to
+  check whether specific products lack inventory for international booking
+  windows. Also check `language` — international visitors may be browsing in
+  English while the experience has limited English-language variants.
 
 **If experience concentrates:**
 - Confirm with `count_days_available_30d` — a drop in available days corroborates supply
@@ -155,6 +245,12 @@ Four hypotheses to run in parallel:
 4. **Session recordings** — once any of the above narrows to a locus (device,
    language, or experience), pull recordings on the checkout page to confirm the
    pattern.
+
+**Optional — if C2A drop is broad with no device/experience concentration:**
+Run the Geo/Non-Geo cut (`context.md → "Geo vs Non-Geo"`). A checkout
+abandonment rate that spikes only in specific countries can point to a
+currency/pricing display issue or a payment method unavailability in that
+market — distinct from a pax or UX problem.
 
 **If A2O dropped** (users submitted payment but order failed):
 
