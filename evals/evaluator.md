@@ -10,11 +10,18 @@ This is not a formality. The purpose is to surface where the analysis fell short
 
 ## What to review
 
-Before scoring, re-read three things:
+Before scoring, read five things in this order:
 
-1. **The HTML report you wrote** — read it as if you've never seen this CE before. Does it hold together?
-2. **Your investigation reasoning** — recall what you looked at, why, and what you decided at each fork. The reasoning matters as much as the conclusion.
-3. **The summary.json you worked from** — check that claims in the report are grounded in actual numbers from the data, not impressions.
+1. **The skill reference files** — read all four before anything else, so you know what instructions existed:
+   - `SKILL.md` — the investigation process (L0 → L1 cascade → L2+ branches)
+   - `references/hypothesis.md` — the branch sets, L0 routing table, and historical patterns
+   - `references/context.md` — table schemas, mix cascade mechanics, dimension definitions
+   - `references/report_structure.md` — the HTML output spec, chart requirements, section order
+2. **The HTML report you wrote** — read it as if you've never seen this CE before. Does it hold together?
+3. **Your investigation transcript** — recall what you looked at, why, and what you decided at each fork. The reasoning matters as much as the conclusion.
+4. **The summary.json you worked from** — check that claims in the report are grounded in actual numbers from the data, not impressions.
+
+Reading the skill files first is what makes the failure mode classification (Section 4) possible. You cannot say "the instruction was missing" unless you have actually looked.
 
 ---
 
@@ -23,7 +30,8 @@ Before scoring, re-read three things:
 For each of the 7 themes below, give:
 - **Score: 1–5**
 - **Justification**: 2–3 sentences citing specific content from the report or investigation. Vague justifications ("the report was clear") are not acceptable.
-- **Improvement** (required if score ≤ 3): one concrete thing that would have raised the score.
+- **Gap** (required if score ≤ 4): describe specifically what was missing or wrong.
+- **Why** (required for every gap): classify the root cause of the gap using one of four tags, and back it with a citation. See the Failure Mode Classification section below.
 
 **Scale:**
 | Score | Meaning |
@@ -33,6 +41,37 @@ For each of the 7 themes below, give:
 | 3 | Adequate — meets the minimum bar but nothing exceptional |
 | 2 | Weak — some effort but significant gaps or errors |
 | 1 | Poor — fundamental failure of this dimension |
+
+---
+
+## Failure Mode Classification
+
+Every gap gets a **`Why`** line. Use exactly one of these four tags:
+
+| Tag | Meaning |
+|-----|---------|
+| `[MISSING_INSTRUCTION]` | The skill files contain no instruction for this behaviour. Claude had no way to know it was expected. |
+| `[AMBIGUOUS_INSTRUCTION]` | An instruction exists but is vague, incomplete, or conflicting enough that Claude reasonably interpreted it differently. |
+| `[EXEC_ERROR]` | The instruction was clear and present. Claude attempted to follow it but reasoned incorrectly (wrong formula, misread data, faulty inference). |
+| `[DATA_LIMIT]` | The data needed to do this correctly was unavailable (no session recordings, no LY series, no availability table access). Skipping or noting the absence was the right call — not a skill flaw. |
+
+### Grounding requirement
+
+**Never assign a tag without citing the source.** The citation format depends on the tag:
+
+- **`[MISSING_INSTRUCTION]`** — state which files you checked and confirm the instruction was absent:
+  > *"Searched SKILL.md, hypothesis.md, context.md, report_structure.md — no instruction found for [behaviour]."*
+
+- **`[AMBIGUOUS_INSTRUCTION]`** — quote the instruction that exists, then state what constraint it was missing:
+  > *"hypothesis.md, 'S2C First-Pass Branches' section: 'run device breakdown.' Instruction exists but does not specify to filter to the target TGID before running — Claude ran it at CE level."*
+
+- **`[EXEC_ERROR]`** — name the file + section that gave the instruction, show that the transcript confirms an attempt, then state what went wrong:
+  > *"context.md, 'Mix Cascade' section instructed computing mix_effect = Δshare × pre_rate. Transcript shows the query was run but the formula was applied in reverse (Δrate × pre_share), overstating the mix contribution."*
+
+- **`[DATA_LIMIT]`** — name the instruction that required the data, and explain why the data was unavailable:
+  > *"report_structure.md requires LY overlay on the 90-day chart. trend_context.series contained no entries with series = 'ly' for this CE — correct to render current-period-only with a callout noting the absence."*
+
+If you cannot write a specific citation, you have not done enough checking. Go back to the skill files and look.
 
 ---
 
@@ -170,10 +209,30 @@ Do not dump a score table. Write the evaluation as a structured assessment:
 State the overall quality of this RCA in plain language. What did it get right? What was the main failure mode?
 
 **2. Theme scores**
-Present each theme with its score, justification, and improvement if applicable. Be specific. Cite actual content from the report.
+Present each theme with its score, justification, and gap + Why for each gap. Format each gap block as:
+
+```
+**Gap:** [what was missing or wrong — specific, not vague]
+**Why:** [TAG] — [citation proving you checked the skill files] — [one sentence on what the fix would be]
+```
+
+Example of a correctly-written gap block:
+```
+**Gap:** Device breakdown ran at CE level rather than filtered to TGID 10118.
+**Why:** [AMBIGUOUS_INSTRUCTION] — hypothesis.md, 'S2C First-Pass Branches': "run device breakdown by channel" — instruction exists but specifies no TGID filter. Fix: add "filtered to the confirmed locus TGID" to this instruction.
+```
 
 **3. The top 2–3 things that would have made this RCA materially better**
 These should be concrete and actionable for the next run — not generic advice.
+
+**4. Failure Mode Summary**
+After the top-3 section, add this table aggregating every gap from Section 2:
+
+| Gap (short label) | Theme | Tag | Fix target |
+|-------------------|-------|-----|------------|
+| [gap name] | T[N] | [TAG] | [file name + what to change] |
+
+The fix target column should name the specific skill file and a one-phrase description of the edit needed. This is what gets turned into a skill improvement in the next iteration.
 
 ---
 
@@ -184,5 +243,9 @@ Before submitting the evaluation, ask yourself:
 - Did I give scores that reflect what I would give a colleague's work, or did I inflate them because this is my own?
 - Did I cite specific things from the report, or did I write vague justifications?
 - Did I identify at least one real weakness, even if the overall quality was high?
+- For every `[MISSING_INSTRUCTION]` tag: did I actually check all four skill files, or did I assume the instruction was absent?
+- For every `[AMBIGUOUS_INSTRUCTION]` tag: did I quote the actual instruction, or did I paraphrase from memory?
+- For every `[EXEC_ERROR]` tag: did I confirm in the transcript that an attempt was made, or did I assume Claude tried and failed?
+- Does every row in the Section 4 table map to a concrete edit in a named file?
 
-An evaluation where every theme scores 4 or 5 with no improvements identified is almost certainly not honest.
+An evaluation where every theme scores 4 or 5 with no improvements identified is almost certainly not honest. An evaluation where failure mode tags appear without citations is not grounded — recheck those before submitting.

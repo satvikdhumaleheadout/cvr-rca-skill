@@ -188,4 +188,19 @@ This makes the skill easier to maintain: process changes update `SKILL.md`, anal
 
 ---
 
+## [v1.5] — 2026-05-04 — Evaluator failure mode classification
+
+**Summary:** The evaluator now diagnoses *why* each gap occurred, not just *what* was missing. Every gap in a theme score gets a failure mode tag (`[MISSING_INSTRUCTION]`, `[AMBIGUOUS_INSTRUCTION]`, `[EXEC_ERROR]`, `[DATA_LIMIT]`) backed by a grounded citation from the skill files. A new Section 4 summary table aggregates all gaps into a single cross-run view that maps directly to skill file edits. This turns the evaluation from a retrospective scorecard into a skill improvement roadmap.
+
+### Changes by file
+
+**`evals/evaluator.md`** (e001)
+- **What to review** — Added skill reference files (SKILL.md, hypothesis.md, context.md, report_structure.md) as the first pre-read step, before the report and transcript. Reading the skill files first is required so the evaluator can verify whether an instruction existed before classifying a gap.
+- **Scoring** — Added two new required fields per theme: `Gap` (if score ≤ 4) describing specifically what was missing or wrong; `Why` (required for every gap) — a failure mode tag with a grounding citation.
+- **Failure Mode Classification** (new section) — Defines four tags with meanings, and a grounding requirement for each. Tag assignment without a citation is explicitly prohibited. Citation format templates provided for all four tag types.
+- **Output format** — Updated Section 2 to show inline `Gap` / `Why` blocks with a worked example. Added Section 4: Failure Mode Summary table mapping every gap to a specific file + fix description.
+- **Self-honesty check** — Added four grounding checks (one per tag type): did you actually look in the skill files, quote the instruction, confirm an attempt in the transcript, verify data unavailability?
+
+---
+
 *Each future entry in this changelog corresponds to one GitHub push. Format: `[vX.Y] — YYYY-MM-DD — Short title` followed by a summary of what changed and why.*
