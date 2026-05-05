@@ -761,10 +761,14 @@ LEFT JOIN `headout-analytics.analytics_reporting.dim_experiences` AS de
 
 **Lead-time bucket query — use when `count_days_available_30d` confirms a supply drop:**
 
+Run this for the specific TGID confirmed as the locus (e.g., the `experience_id` identified in the experience-level S2C breakdown). A single TGID can map to multiple TIDs — different time slots, language variants, or ticket types all sitting under the same tour group. The query handles this by summing across all TIDs for the TGID before deciding if a date is sold out. Do not run this for the full CE — that mixes inventory signals from all TGIDs and obscures the signal from the specific one driving the drop.
+
+**Why the TID aggregation step matters:** A date is sold out from the user's perspective only when *all* TIDs for that date have zero remaining capacity. If TGID 10118 has three time-slot TIDs (10am sold out, 2pm has 50 left, 6pm has 20 left), that date has capacity and should not count as zero-inventory. Without the intermediate aggregation step, `COUNTIF(total_remaining = 0)` would count TID × date combinations where any single TID is exhausted — overcounting sold-out dates when a TGID has multiple TIDs.
+
 ```sql
 -- Bridge: dim_experiences has no tour_id; inventory_availability has no experience_id.
 -- Use dim_tours (has both) as the two-hop bridge.
-WITH ce_tours AS (
+WITH tgid_tours AS (
 
     SELECT DISTINCT dt.tour_id
 
@@ -773,46 +777,60 @@ WITH ce_tours AS (
         USING (experience_id)
 
     WHERE de.combined_entity_id = '<ce_id>'
+      AND de.experience_id = '<tgid>'     -- filter to the specific TGID confirmed as the locus
+
+),
+
+-- Aggregate TID-level rows to TGID × date grain before bucketing.
+-- This is the critical step: sum remaining across all TIDs for each date so that
+-- a date registers as zero-inventory only when ALL TIDs have zero remaining.
+tgid_daily_inventory AS (
+
+    SELECT
+        inv.extracted_date,
+        inv.experience_date,
+        SUM(inv.total_remaining)   AS date_total_remaining,
+        SUM(inv.count_time_slots)  AS date_total_slots
+
+    FROM tgid_tours
+    INNER JOIN `headout-analytics.analytics_reporting.inventory_availability` AS inv
+        USING (tour_id)
+
+    WHERE inv.extracted_date BETWEEN '<pre_start>' AND '<post_end>'
+
+    GROUP BY 1, 2
 
 ),
 
 inventory_by_lead_time AS (
 
     SELECT
-        inv.tour_id,
-        inv.extracted_date,
-        inv.experience_date,
-        inv.total_remaining,
-        inv.count_time_slots,
-        DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) AS lead_time_days,
+        *,
+        DATE_DIFF(experience_date, extracted_date, DAY) AS lead_time_days,
         CASE
-            WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 0 AND 2   THEN '0-2d'
-            WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 3 AND 6   THEN '3-6d'
-            WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 7 AND 13  THEN '7-13d'
-            WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 14 AND 29 THEN '14-29d'
-            WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) >= 30             THEN '30d+'
+            WHEN DATE_DIFF(experience_date, extracted_date, DAY) BETWEEN 0 AND 2   THEN '0-2d'
+            WHEN DATE_DIFF(experience_date, extracted_date, DAY) BETWEEN 3 AND 6   THEN '3-6d'
+            WHEN DATE_DIFF(experience_date, extracted_date, DAY) BETWEEN 7 AND 13  THEN '7-13d'
+            WHEN DATE_DIFF(experience_date, extracted_date, DAY) BETWEEN 14 AND 29 THEN '14-29d'
+            WHEN DATE_DIFF(experience_date, extracted_date, DAY) >= 30             THEN '30d+'
         END AS lead_time_bucket
         -- Adapt bucket boundaries to the CE's booking horizon before running.
         -- Same-day / short-horizon CEs (escape rooms, day tours): collapse to 0-1d / 2-4d / 5-7d / 8-14d / 14d+.
         -- Long-horizon CEs (iconic landmarks, events): add a 45d+ or 60d+ bucket if 30d+ bookings are material.
         -- A bucket that is empty in the pre period cannot produce a signal — remove or merge it.
 
-    FROM ce_tours
-    INNER JOIN `headout-analytics.analytics_reporting.inventory_availability` AS inv
-        USING (tour_id)
-
-    WHERE inv.extracted_date BETWEEN '<pre_start>' AND '<post_end>'
+    FROM tgid_daily_inventory
 
 )
 
 SELECT
     lead_time_bucket,
     extracted_date,
-    COUNT(DISTINCT experience_date)     AS count_dates_with_slots,
-    SUM(count_time_slots)               AS total_slots,
-    AVG(total_remaining)                AS avg_remaining,
-    COUNTIF(total_remaining = 0)        AS count_dates_zero_inventory,
-    COUNT(*)                            AS total_dates
+    COUNT(DISTINCT experience_date)          AS count_dates_with_slots,
+    SUM(date_total_slots)                    AS total_slots,
+    AVG(date_total_remaining)                AS avg_remaining,
+    COUNTIF(date_total_remaining = 0)        AS count_dates_zero_inventory,
+    COUNT(*)                                 AS total_dates
 
 FROM inventory_by_lead_time
 
@@ -1125,3 +1143,4 @@ thinking and makes the inference scannable.
 | c009 | 2026-04-29 | Moved "Investigation tree — L0 to L1 branch map" and "Common Investigation Patterns" to hypothesis.md — these are hypothesis logic, not business context. context.md now owns business vocabulary, table schemas, analytical concepts, and query rules only. |
 | c010 | 2026-04-29 | Mix Cascade redesigned as routing vs conversion determination. Each of the three levels (MB/HO, Paid/Organic, Channel) now has an explicit mix-check: compute mix_effect vs conversion_effect; if mix dominates exit as routing story at that level, if conversion dominates fix the segment and descend. Two transcript declaration forms added (conversion path vs routing exit). |
 | c013 | 2026-05-04 | Added "Geo vs Non-Geo" dimension under "Dimensions to Query and When": pre-step CE country lookup via `dim_experiences.country` (not `dim_combined_entities.country` which can be NULL), country-level breakdown query returning top 5 countries by combined pre+post volume with home country always included, `geo_segment` label (Geo/Non-Geo/Unknown) on each row, and interpretation guide for per-country signals and cross-dimensional intersections (country × language, country × experience_id). |
+| c014 | 2026-05-05 | Fixed two bugs in the inventory lead-time bucket query: (1) The query was CE-wide — fetched all tour_ids for the CE instead of filtering to the specific TGID confirmed as the locus. Now filters to `experience_id = '<tgid>'` in the `tgid_tours` CTE. (2) `COUNTIF(total_remaining = 0)` counted TID × date combinations where any single TID had zero remaining — overcounting sold-out dates for TGIDs with multiple TIDs (time slots, variants). Fixed by adding a `tgid_daily_inventory` CTE that sums `total_remaining` and `count_time_slots` across all TIDs per `extracted_date × experience_date` before bucketing. `COUNTIF(date_total_remaining = 0)` now correctly identifies dates where ALL TIDs have zero remaining (i.e., truly sold out from the user's perspective). Added explanatory note on why the TID aggregation step matters. |
