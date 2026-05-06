@@ -186,9 +186,10 @@ Work through two tiers in order.
 - `device_type` × S2C rate pre/post — a mobile-concentrated drop points to a
   select-page UX or rendering issue specific to small screens
 - `experience_id` × S2C rate pre/post — a drop in specific experiences points
-  to a supply or pricing issue for those products. When you find this, also pull
-  `count_days_available_30d` from `product_rankings_features` for those
-  experiences to confirm availability is the mechanism.
+  to a supply or pricing issue for those products. When you find this, run the
+  `inventory_availability` TID summary table and daily time-series for the
+  affected TGID (see `context.md → inventory analysis`) to confirm availability
+  is the mechanism.
 - `browsing_country` (Geo/Non-Geo) × S2C rate — a Geo-only S2C drop points to
   local supply scarcity or a pricing shock visible at the variant-selection step
   for domestic users; a Non-Geo country drop points to language/UX friction at
@@ -207,20 +208,15 @@ Work through two tiers in order.
   English while the experience has limited English-language variants.
 
 **If experience concentrates:**
-- Confirm with `count_days_available_30d` — a drop in available days corroborates supply
-- Run the `inventory_availability` lead-time bucket query to identify *which
-  window* went empty (this converts "availability dropped" into a specific
-  mechanism and a specific DRI)
-- Cross-check with `lead_time_days` distribution from the funnel table — if users
-  shifted toward longer lead times AND that same window is empty in
-  `inventory_availability`, the shift is supply-caused, not behavioural
+- For **gradual S2C decline** (drift over multiple weeks, not a sudden drop): first pull `days_to_first_available_date` from `product_rankings_features` for the concentrated TGID pre vs post. An increasing trend means users see a progressively thinner near-term calendar on the select page — supply scarcity is structural, not event-triggered. This is a fast check to confirm supply direction before running inventory queries.
+- Run the `inventory_availability` TID summary table (Step 2) — if tickets are depleted for at least one limited-capacity TID, supply is the mechanism. If tickets are full, supply is ruled out — pivot to pricing (Q5).
+- When Step 2 confirms supply depletion, run the daily time-series (Step 3) to identify *which lead-time window* declined and *when* — this gives the supply team a specific window, TID, and onset date to investigate.
+- Cross-check with `lead_time_days` distribution from the funnel table — if users shifted toward longer lead times AND that same window is empty in `inventory_availability`, the shift is supply-caused, not behavioural.
 
 **Tier 2 — If no dimension concentrates (drop is broad):**
-A CE-wide S2C drop with no language/device/experience concentration is unusual.
-Check two things: (1) was there a change in the checkout flow or variant
-selection UI? (2) did availability drop uniformly across all experiences? A
-platform-wide availability configuration change (e.g., cut-off window extended
-globally) would produce a CE-wide S2C drop with no concentration.
+A CE-wide S2C drop with no language/device/experience concentration is unusual. Check two things: (1) was there a change in the checkout flow or variant selection UI? (2) did availability drop uniformly across all experiences?
+
+To check (2): pick the top 3 TGIDs by `users_select` volume from Q4 and run the TID summary table (Step 2 from `context.md → inventory analysis`) for each. If the same lead-time bucket is depleted across all three TGIDs → CE-wide supply constraint (cut-off period change, vendor pulling all inventory — see *Broad-drop inventory path* in context.md). If tickets are full across all three → supply is not the mechanism; focus on checkout flow or variant selection UX that changed uniformly across all experiences.
 
 ### C2O — first-pass branches
 
@@ -382,7 +378,7 @@ Slow S2C erosion points to structural supply or complexity issues that worsen ov
 
 2. **Variant complexity increasing / decision paralysis** — More SKUs or variants added without clear differentiation. Users are overwhelmed and abandon before committing. Historical case: Vienna concerts — multiple venue × composer × price × duration combinations with no clear "best" option created decision paralysis. S2C improved after assortment was simplified.
 
-3. **Vendor throttling inventory under fulfilment strain** — A SP with rising cancellation rates often quietly reduces available slots or tightens release windows to avoid over-booking. This directly reduces 0-2D availability visible at the date picker, causing S2C to drop. The signal: `count_days_available_30d` and `days_to_first_available_date` both worsen for the specific experience(s) served by that vendor, while peers hold. Note: the vendor's CR% itself is a fulfilment/A2O metric — it does not directly move S2C. The connection is through availability, not fulfillment rate.
+3. **Vendor throttling inventory under fulfilment strain** — A SP with rising cancellation rates often quietly reduces available slots or tightens release windows to avoid over-booking. This directly reduces 0-2D availability visible at the date picker, causing S2C to drop. The signal: `days_to_first_available_date` (from `product_rankings_features`) worsens and ticket counts in the 0–2d bucket from the `inventory_availability` TID summary table drop for the specific experience(s) served by that vendor, while peers hold. Note: the vendor's CR% itself is a fulfilment/A2O metric — it does not directly move S2C. The connection is through availability, not fulfillment rate.
 
 4. **Seasonal availability pattern** — Certain months have structural low-availability periods for the experience type (e.g., peak demand for a limited-capacity venue, off-season closures). Compare to prior-year data to distinguish seasonal from structural.
 
@@ -468,7 +464,7 @@ Before diagnosing any funnel step: if mix is dominant, the story is about traffi
 
 **Hypotheses:**
 
-1. **Experience-specific availability collapse** — This product's SP closed inventory for the post period or tightened cut-off settings. Check `count_days_available_30d` for that experience_id in pre vs post.
+1. **Experience-specific availability collapse** — This product's SP closed inventory for the post period or tightened cut-off settings. Run the `inventory_availability` TID summary table and daily time-series for that TGID (see `context.md → inventory analysis`) to confirm and identify which lead-time window was affected.
 
 2. **Vendor-specific operational issue** — SP had cancellations, moved to manual fulfillment mode, or had an API outage affecting only their products. Historical case: NY Helicopter Charm Aviation required manual FF mode; completions dropped disproportionately on Charm-serviced TGIDs.
 

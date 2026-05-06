@@ -626,7 +626,6 @@ are for the raw table.
 | `original_price_usd` | FLOAT64 | Price before discount. |
 | `lev_score` | FLOAT64 | Listing Experience Value score — higher means better listing quality. |
 | `days_to_first_available_date` | INT64 | Days from `event_date` to first available booking date. |
-| `count_days_available_30d` | INT64 | Number of days with available inventory in the next 30-day window. Useful as availability proxy for S2C analysis. |
 | `is_combo` | BOOLEAN | Whether this is a combo product. |
 | `count_ratings` | INT64 | Total number of customer ratings. |
 | `average_rating` | FLOAT64 | Average customer rating (1–5 scale). |
@@ -713,7 +712,7 @@ experience names onto funnel results and for product-level price/rating metadata
 | `country` | STRING | Country of the experience. |
 | `business_market` | STRING | Business market classification. |
 | `business_region` | STRING | Business region classification. |
-| `is_available` | BOOLEAN | **Live flag** — TRUE if `next_available_date >= CURRENT_DATE` (adjusted for city timezone). **Not reliable for historical analysis.** Use `product_rankings_features.count_days_available_30d` for historical availability. |
+| `is_available` | BOOLEAN | **Live flag** — TRUE if `next_available_date >= CURRENT_DATE` (adjusted for city timezone). **Not reliable for historical analysis.** For supply investigation, use `inventory_availability` directly (see table schema below). |
 | `next_available_date` | TIMESTAMP | Next available booking date. Also a live snapshot. |
 | `minimum_price` | FLOAT64 | Minimum price when inventory is available. |
 | `listing_final_price` | FLOAT64 | Final listing price after discount. |
@@ -743,7 +742,7 @@ LEFT JOIN `headout-analytics.analytics_reporting.dim_experiences` AS de
 
 **Grain:** One row per `tour_id` × `experience_date` × `extracted_date`. Partitioned by `extracted_date`, clustered by `tour_id`.
 
-**Window:** 30-day rolling window — both `experience_date` and `extracted_date` are within 30 days of current date. For periods older than 30 days, use `analytics_intermediate.inventory_changes` instead (see below).
+**Window:** 30-day rolling window — both `experience_date` and `extracted_date` are within 30 days of current date. For pre-periods older than 30 days, see Path A below — no pre-period comparison is possible; show current-state snapshot only.
 
 **Key columns:**
 
@@ -759,15 +758,112 @@ LEFT JOIN `headout-analytics.analytics_reporting.dim_experiences` AS de
 
 **Join path to get from `combined_entity_id` → inventory:** `dim_experiences` has no `tour_id` column; `inventory_availability` has no `experience_id` column. The bridge is `dim_tours`, which carries both `tour_id` and `experience_id`. Always use the two-hop pattern: `dim_experiences (experience_id) → dim_tours (experience_id → tour_id) → inventory_availability (tour_id)`.
 
-**Lead-time bucket query — use when `count_days_available_30d` confirms a supply drop:**
+**Inventory analysis — Path A vs Path B**
 
-Run this for the specific TGID confirmed as the locus (e.g., the `experience_id` identified in the experience-level S2C breakdown). A single TGID can map to multiple TIDs — different time slots, language variants, or ticket types all sitting under the same tour group. The query handles this by summing across all TIDs for the TGID before deciding if a date is sold out. Do not run this for the full CE — that mixes inventory signals from all TGIDs and obscures the signal from the specific one driving the drop.
+Before running any inventory query, determine which path applies based on how far back the pre period reaches:
 
-**Why the TID aggregation step matters:** A date is sold out from the user's perspective only when *all* TIDs for that date have zero remaining capacity. If TGID 10118 has three time-slot TIDs (10am sold out, 2pm has 50 left, 6pm has 20 left), that date has capacity and should not count as zero-inventory. Without the intermediate aggregation step, `COUNTIF(total_remaining = 0)` would count TID × date combinations where any single TID is exhausted — overcounting sold-out dates when a TGID has multiple TIDs.
+- **Path B** (both periods within window): `pre_start >= CURRENT_DATE - 30`. Full pre/post comparison is available. Run both the TID summary table (Step 2) and the daily time-series (Step 3) with pre and post period tagging.
+- **Path A** (pre period outside window): `pre_start < CURRENT_DATE - 30`. `inventory_availability` only holds 30 days of history — the pre period has zero rows. Run the TID summary table for current state and the daily time-series for the post period only. State this limitation explicitly in the report: *"Pre-period inventory data is unavailable (pre period is more than 30 days ago); current-state snapshot shown for post period only."*
+
+**Note on `total_remaining` for unlimited slots:** `inventory_availability` represents unlimited-capacity time slots as `total_remaining = 1` per slot (not actual capacity). Zero reliably signals sold-out; a non-zero value from an unlimited-capacity TID does not indicate scarce supply. Use `count_unlimited_time_slots` vs `count_limited_time_slots` to distinguish if needed — an S2C drop from unlimited-capacity TIDs almost never traces to a capacity constraint.
+
+**Step 1 — Identify the TGID locus (or loci) using Q4**
+
+Do not run inventory queries for the whole CE. Use Q4 results (`experience_id` × S2C pre/post) to compute `lost_checkouts_delta` for each TGID:
+
+```
+lost_checkouts_delta = users_select_post × (s2c_rate_pre − s2c_rate_post)
+```
+
+Sort TGIDs by `lost_checkouts_delta` descending. Three cases determine what to run next:
+
+- **Case A — Single dominant TGID** (top TGID accounts for ≥60% of total `lost_checkouts_delta`): That TGID is the locus. Run Steps 2–3 for it only.
+- **Case B — Multiple significant TGIDs** (2–3 TGIDs each contribute ≥10% of total `lost_checkouts_delta`): All are candidate loci. Run Step 2 for each (up to 3). Run Step 3 only for those where Step 2 confirms supply depletion.
+- **Case C — Uniform drop** (no single TGID accounts for ≥10%, loss is spread evenly): Not an experience-level issue. Skip Steps 2–3 here — see the *Broad-drop inventory path* at the end of this section.
+
+One TGID maps to multiple TIDs — different time slots, language variants, or ticket types all under the same tour group. Steps 2–3 always operate at TID level within a TGID.
+
+**Step 2 — TID summary table (current-state snapshot)**
+
+Run for both Path A and Path B. Always run against the latest available `extracted_date` in `inventory_availability`. Presents one row per TID with ticket counts (sum of `total_remaining`) aggregated into four lead-time buckets. A TID with zero across all buckets is currently sold out for all upcoming dates in the window.
 
 ```sql
 -- Bridge: dim_experiences has no tour_id; inventory_availability has no experience_id.
--- Use dim_tours (has both) as the two-hop bridge.
+-- dim_tours carries both — use it as the two-hop bridge.
+WITH tgid_tours AS (
+
+    SELECT DISTINCT
+        dt.tour_id,
+        dt.tour_name
+
+    FROM `headout-analytics.analytics_reporting.dim_experiences` AS de
+    INNER JOIN `headout-analytics.analytics_reporting.dim_tours` AS dt
+        USING (experience_id)
+
+    WHERE de.experience_id = '<tgid>'
+
+),
+
+latest_snapshot_date AS (
+
+    SELECT MAX(extracted_date) AS max_extracted_date
+
+    FROM `headout-analytics.analytics_reporting.inventory_availability`
+
+    WHERE tour_id IN (SELECT tour_id FROM tgid_tours)
+
+),
+
+snapshot AS (
+
+    SELECT
+        inv.tour_id,
+        tgt.tour_name,
+        DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) AS lead_time_days,
+        inv.total_remaining,
+        inv.count_unlimited_time_slots,
+        inv.count_limited_time_slots
+
+    FROM tgid_tours AS tgt
+    INNER JOIN `headout-analytics.analytics_reporting.inventory_availability` AS inv
+        USING (tour_id)
+    CROSS JOIN latest_snapshot_date
+
+    WHERE inv.extracted_date = latest_snapshot_date.max_extracted_date
+      AND inv.experience_date >= inv.extracted_date
+
+)
+
+SELECT
+    tour_id,
+    tour_name,
+    SUM(CASE WHEN lead_time_days BETWEEN 0  AND  2  THEN total_remaining ELSE 0 END) AS tickets_0_2d,
+    SUM(CASE WHEN lead_time_days BETWEEN 3  AND  7  THEN total_remaining ELSE 0 END) AS tickets_3_7d,
+    SUM(CASE WHEN lead_time_days BETWEEN 8  AND 13  THEN total_remaining ELSE 0 END) AS tickets_8_13d,
+    SUM(CASE WHEN lead_time_days BETWEEN 14 AND 30  THEN total_remaining ELSE 0 END) AS tickets_14_30d,
+    MAX(CASE WHEN count_limited_time_slots = 0 AND count_unlimited_time_slots > 0
+             THEN TRUE ELSE FALSE END)                                                AS is_fully_unlimited_capacity
+
+FROM snapshot
+
+GROUP BY 1, 2
+
+ORDER BY 1
+```
+
+**Step 3 — Daily time-series per lead-time bucket**
+
+Run for both paths. Produces one row per `extracted_date` with total tickets in each lead-time bucket. This feeds four line charts — one chart per bucket, `extracted_date` on the x-axis, ticket count on the y-axis. For Path B, the `period` column enables overlaying pre and post as separate series. For Path A, all rows will have `period = 'post'`.
+
+**TID scoping for Step 3 — use the Step 2 results to decide:**
+- **One TID is the locus** (its buckets near-zero while other TIDs hold tickets): filter to that TID by setting `<scope_filter>` = `dt.tour_id = '<tid_id>'` in the WHERE below.
+- **All TIDs depleted equally**: aggregate the whole TGID by setting `<scope_filter>` = `de.experience_id = '<tgid>'`.
+
+**Date range parameters** — set `<series_start>` and `<series_end>` based on path:
+- Path B (`pre_start >= CURRENT_DATE - 30`): `series_start = pre_start`, `series_end = post_end`
+- Path A (`pre_start < CURRENT_DATE - 30`): `series_start = post_start`, `series_end = post_end`
+
+```sql
 WITH tgid_tours AS (
 
     SELECT DISTINCT dt.tour_id
@@ -776,85 +872,58 @@ WITH tgid_tours AS (
     INNER JOIN `headout-analytics.analytics_reporting.dim_tours` AS dt
         USING (experience_id)
 
-    WHERE de.combined_entity_id = '<ce_id>'
-      AND de.experience_id = '<tgid>'     -- filter to the specific TGID confirmed as the locus
-
-),
-
--- Aggregate TID-level rows to TGID × date grain before bucketing.
--- This is the critical step: sum remaining across all TIDs for each date so that
--- a date registers as zero-inventory only when ALL TIDs have zero remaining.
-tgid_daily_inventory AS (
-
-    SELECT
-        inv.extracted_date,
-        inv.experience_date,
-        SUM(inv.total_remaining)   AS date_total_remaining,
-        SUM(inv.count_time_slots)  AS date_total_slots
-
-    FROM tgid_tours
-    INNER JOIN `headout-analytics.analytics_reporting.inventory_availability` AS inv
-        USING (tour_id)
-
-    WHERE inv.extracted_date BETWEEN '<pre_start>' AND '<post_end>'
-
-    GROUP BY 1, 2
-
-),
-
-inventory_by_lead_time AS (
-
-    SELECT
-        *,
-        DATE_DIFF(experience_date, extracted_date, DAY) AS lead_time_days,
-        CASE
-            WHEN DATE_DIFF(experience_date, extracted_date, DAY) BETWEEN 0 AND 2   THEN '0-2d'
-            WHEN DATE_DIFF(experience_date, extracted_date, DAY) BETWEEN 3 AND 6   THEN '3-6d'
-            WHEN DATE_DIFF(experience_date, extracted_date, DAY) BETWEEN 7 AND 13  THEN '7-13d'
-            WHEN DATE_DIFF(experience_date, extracted_date, DAY) BETWEEN 14 AND 29 THEN '14-29d'
-            WHEN DATE_DIFF(experience_date, extracted_date, DAY) >= 30             THEN '30d+'
-        END AS lead_time_bucket
-        -- Adapt bucket boundaries to the CE's booking horizon before running.
-        -- Same-day / short-horizon CEs (escape rooms, day tours): collapse to 0-1d / 2-4d / 5-7d / 8-14d / 14d+.
-        -- Long-horizon CEs (iconic landmarks, events): add a 45d+ or 60d+ bucket if 30d+ bookings are material.
-        -- A bucket that is empty in the pre period cannot produce a signal — remove or merge it.
-
-    FROM tgid_daily_inventory
+    WHERE <scope_filter>
+    -- Set to: de.experience_id = '<tgid>'  (all TIDs)
+    --     OR: dt.tour_id = '<tid_id>'       (single TID locus)
 
 )
 
 SELECT
-    lead_time_bucket,
-    extracted_date,
-    COUNT(DISTINCT experience_date)          AS count_dates_with_slots,
-    SUM(date_total_slots)                    AS total_slots,
-    AVG(date_total_remaining)                AS avg_remaining,
-    COUNTIF(date_total_remaining = 0)        AS count_dates_zero_inventory,
-    COUNT(*)                                 AS total_dates
+    inv.extracted_date,
+    CASE
+        WHEN inv.extracted_date BETWEEN '<pre_start>'  AND '<pre_end>'  THEN 'pre'
+        WHEN inv.extracted_date BETWEEN '<post_start>' AND '<post_end>' THEN 'post'
+    END AS period,
+    SUM(CASE WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 0  AND  2  THEN inv.total_remaining ELSE 0 END) AS tickets_0_2d,
+    SUM(CASE WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 3  AND  7  THEN inv.total_remaining ELSE 0 END) AS tickets_3_7d,
+    SUM(CASE WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 8  AND 13  THEN inv.total_remaining ELSE 0 END) AS tickets_8_13d,
+    SUM(CASE WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 14 AND 30  THEN inv.total_remaining ELSE 0 END) AS tickets_14_30d
 
-FROM inventory_by_lead_time
+FROM tgid_tours
+INNER JOIN `headout-analytics.analytics_reporting.inventory_availability` AS inv
+    USING (tour_id)
+
+WHERE inv.experience_date >= inv.extracted_date
+  AND inv.extracted_date BETWEEN '<series_start>' AND '<series_end>'
 
 GROUP BY 1, 2
 
-ORDER BY 2, 1
+ORDER BY 1
 ```
 
-**Interpreting results:** Compare `count_dates_zero_inventory` and `avg_remaining` per `lead_time_bucket` across pre vs post `extracted_date` range. Two distinct patterns, each pointing to a different mechanism:
+**Interpreting results:**
 
-- **One bucket spikes, others hold** → window-specific supply constraint. The data identifies *where* the problem is; it does not identify *why*. Do not assert a mechanism (allotment cut, bulk booking, cut-off setting, seasonal closure) without corroborating evidence — name the pattern and flag it for the supply team to investigate.
-- **All buckets decline roughly equally** → platform-wide or experience-wide supply reduction (product paused, vendor pulled all inventory, capacity cut across all dates). A window-specific explanation does not apply here.
+**Unlimited capacity check (do this first):** Before calling any TID supply-constrained, check `is_fully_unlimited_capacity` in the Step 2 results. If `TRUE`, that TID's time slots are uncapped — `total_remaining` is 1 per slot as a system constant, not real seat count. Do not flag such TIDs as supply-constrained based on low ticket values alone. `total_remaining = 0` is still a real signal (the slot was removed). Only proceed with supply analysis for TIDs where `is_fully_unlimited_capacity = FALSE`.
+
+**Supply gate (before running Step 3):** If Step 2 shows non-depleted tickets across all limited-capacity TIDs for the confirmed TGID(s), supply is not the mechanism — do not run Step 3. Pivot instead to pricing (Q5 price trend for the concentrated TGID) or select-page UX investigation. Only run Step 3 when at least one limited-capacity TID shows a materially depleted bucket.
+
+**TID summary table (Step 2):** Compare ticket counts across TIDs within the same bucket. A TID with zero tickets in a bucket that was non-zero in Path B's pre period is the supply locus. For Path A, zero across all buckets indicates current sell-out with no historical baseline.
+
+**Daily time-series (Step 3):** A sustained downward trend in one bucket starting near the post period onset, while other buckets hold, identifies the specific lead-time window affected. All buckets declining together indicates a product-wide supply reduction.
+
+- **One bucket drops, others hold** → window-specific constraint (allotment cut, bulk booking, cut-off change). Name the pattern and flag for the supply team — do not assert the mechanism without corroborating evidence.
+- **All buckets drop** → product-wide or platform-wide supply reduction (product paused, vendor pulled all inventory).
 
 ---
 
-### `analytics_intermediate.inventory_changes` (fallback for periods > 30 days ago)
+**Broad-drop inventory path (Case C — uniform S2C drop, no TGID concentration)**
 
-**What it is:** Transaction log of every inventory change event. Use when the post period falls outside `inventory_availability`'s 30-day rolling window.
+When Q4 shows no TGID accounts for ≥10% of lost checkouts (the S2C drop is spread evenly across all experiences), this is not an experience-level supply issue. To confirm whether availability dropped CE-wide:
 
-**Grain:** One row per inventory change event — `experience_date` × `updated_at` (timestamp of the change). History from 2020-01-01 onwards.
+Pick the **top 3 TGIDs by `users_select` volume** from Q4 (not by S2C drop — by raw traffic). Run Step 2 (TID summary table) for each. Two outcomes:
 
-**Key columns:** `tour_id`, `experience_date`, `updated_at`, `remaining` (INT64), `status`, `guest_type`.
-
-**Usage:** Same lead-time bucket logic as above — substitute `DATE(updated_at)` for `extracted_date` and filter on `experience_date` for the post period. Because this is a change log rather than a daily snapshot, aggregate to daily grain first (`MAX(remaining)` per `tour_id` × `experience_date` × `DATE(updated_at)`) before bucketing.
+- **Same bucket depleted across all three TGIDs** → CE-wide supply constraint. A platform-level cut-off period change or vendor pulling all inventory would produce exactly this pattern. Escalate to the supply team with the specific bucket and onset date from the time-series.
+- **Tickets full across all three TGIDs** → supply is not the mechanism. Focus on checkout flow changes or variant selection UX (a UI change that affected all experiences equally would produce a uniform S2C drop with no experience concentration).
 
 ---
 
@@ -1094,15 +1163,20 @@ intersection. If device shows a mobile drop AND language shows a French drop,
 the real number is French × iOS — it may be 10× larger than either dimension
 alone. Always test the intersection before concluding the causes are independent.
 
-### Experience-level with availability proxy
+### Experience-level S2C and inventory
 
 For S2C hypotheses, query `COUNT(DISTINCT user_id)` and S2C rate by
-`experience_id` pre vs post. Then join `product_rankings_features` on
-`experience_id` + `event_date` to get `count_days_available_30d` per experience
-per day. A drop in available days that coincides with the S2C drop timing is a
-strong supply signal.
+`experience_id` pre vs post (use Q4 or a direct funnel query). A drop
+concentrated in one or a few TGIDs is the supply entry point.
 
-When `count_days_available_30d` confirms a drop for one or more experiences, run the `inventory_availability` lead-time bucket query (see table schema above) to identify **which specific lead-time window** went empty. This converts a coarse "availability dropped" signal into a specific supply mechanism — e.g., "the 7–13 day window went to zero while near-term and far-future dates were unaffected" points to vendor allotment cut or bulk booking consumption in that window, not a platform-wide supply issue.
+When a TGID is confirmed as the locus from the S2C breakdown, go directly to
+`inventory_availability` — run the TID summary table (Step 2) and the daily
+time-series (Step 3) described in the table schema above. The TID summary shows
+which specific tour IDs within the TGID have depleted or zero tickets; the daily
+time-series shows when the depletion began relative to the post period onset.
+This converts "S2C dropped on experience X" into "the 3–7 day booking window
+for TID Y went to zero tickets starting around [date]" — a specific, actionable
+supply signal.
 
 ---
 

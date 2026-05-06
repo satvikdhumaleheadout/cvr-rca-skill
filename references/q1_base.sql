@@ -24,10 +24,6 @@ WITH base AS (
       ELSE 'Organic'
     END AS channel,
 
-    MAX(CASE WHEN page_type IN (
-      'Collection', 'ShoulderPage', 'Cruises Landing Page', 'Hop-On Hop-Off',
-      'Airport Transfers', 'Content Page', 'Theme', 'Collection Page', 'Experience Page'
-    ) THEN 1 ELSE 0 END)                                            AS visited_lp,
     MAX(CASE WHEN has_select_page_viewed THEN 1 ELSE 0 END)         AS visited_select,
     MAX(CASE WHEN has_checkout_started   THEN 1 ELSE 0 END)         AS checkout_started,
     MAX(CASE WHEN has_order_attempted    THEN 1 ELSE 0 END)         AS order_attempted,
@@ -42,12 +38,16 @@ WITH base AS (
 
   WHERE combined_entity_id = '{{CE_ID}}'
     AND event_date BETWEEN '{{PRE_START}}' AND '{{POST_END}}'
+    AND page_type IN (
+      'Collection', 'ShoulderPage', 'Cruises Landing Page', 'Hop-On Hop-Off',
+      'Airport Transfers', 'Content Page', 'Theme', 'Collection Page', 'Experience Page'
+    )
     AND (
       advertising_channel_type IS NULL
       OR advertising_channel_type != 'PERFORMANCE_MAX'
     )
 
-  GROUP BY 1, 2, 3, 9
+  GROUP BY 1, 2, 3, 8
 
 ),
 

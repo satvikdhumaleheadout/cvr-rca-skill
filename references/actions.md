@@ -29,7 +29,7 @@ Actions are drawn from historical Headout RCAs across 21 MMPs and the CVR Cause-
 
 ## Root Cause 2: Inventory / availability constraint
 
-**Signal:** `count_days_available_30d` dropped in post period, or `days_to_first_available_date` increased significantly. S2C drop concentrated on specific experiences or across the CE.
+**Signal:** Ticket counts in one or more lead-time buckets from the `inventory_availability` TID summary table near zero in post period, or `days_to_first_available_date` (from `product_rankings_features`) increased significantly. S2C drop concentrated on specific experiences or across the CE.
 
 **Actions:**
 

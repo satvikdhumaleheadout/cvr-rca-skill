@@ -188,6 +188,78 @@ This makes the skill easier to maintain: process changes update `SKILL.md`, anal
 
 ---
 
+## [v1.6] — 2026-05-06 — Inventory analysis overhaul + Geo/Non-Geo dimension + Mix arithmetic guide
+
+**Summary:** Three separate upgrades shipped together. First, the inventory analysis methodology was comprehensively overhauled: the old `count_days_available_30d` proxy is gone, replaced by direct TID-level queries against `inventory_availability` with a structured three-step path (locus identification → TID snapshot → daily time-series). The query was also corrected for two bugs (CE-wide scope, sold-out overcounting). Second, a Geo/Non-Geo dimension was added as a first-pass S2C and LP2S cut, and the mix cascade investigation path was expanded with a worked arithmetic guide and a canonical L2+ query template. Third, a new `events.md` reference file documents all GTM/Mixpanel funnel events.
+
+### Changes by file
+
+**`references/context.md`** — c012, c013, c014, c015
+
+- **c012 — Mix cascade query fixes and arithmetic guide:** Fixed `COUNTIF` → `COUNT(DISTINCT CASE WHEN)` in Level 2/3 cascade queries and the canonical L2+ template. Added `PERFORMANCE_MAX` exclusion to Level 2/3 queries. Added `mix_effect`/`conversion_effect` arithmetic guide with step-by-step formula and a Level 3 worked example showing how to confirm which cascade level is the routing driver.
+- **c012 — Canonical L2+ query template:** Added a single annotated template that carries the fixed segment filters through all Level 2+ funnel queries — prevents the fixed segment from being silently dropped on custom cuts.
+- **c013 — Geo/Non-Geo dimension:** Added browsing country as a pre-step dimension. CE country identified from `dim_experiences.country`; query returns top-5 countries always plus the CE's home country. Interpretation guide covers Geo-only drop (demand shift or regulatory), Non-Geo-only drop (paid search or content), and mixed drops. Cross-dimensional intersections added (Geo × device, Geo × channel).
+- **c014 — Inventory query scope bug fix:** Corrected a CE-wide scope bug where the query fetched all `tour_id`s for the CE instead of filtering to the confirmed TGID. Fixed by filtering `dim_tours` to `experience_id = '<tgid>'` before joining `inventory_availability`.
+- **c014 — Inventory sold-out overcounting fix:** `COUNTIF(total_remaining = 0)` operated at TID × date grain — a date where one TID was sold out but others had capacity was incorrectly counted as zero-inventory. Fixed by adding a `tgid_daily_inventory` CTE that sums remaining across all TIDs per date before bucketing. A date is only counted as sold out when the sum across all TIDs for that date is zero.
+- **c015 — Inventory analysis complete rewrite:** Removed `count_days_available_30d` as the inventory signal; replaced with direct `inventory_availability` queries throughout. Restructured as a three-step path:
+  - **Step 1 — Locus identification:** Compute `lost_checkouts_delta = users_select_post × (s2c_rate_pre − s2c_rate_post)` for each TGID from Q4 results. Three cases: Case A (single TGID ≥60% of total delta — that TGID is the locus), Case B (2–3 TGIDs each ≥10% — multiple loci, run Step 2 for each), Case C (no TGID ≥10% — uniform drop, see broad-drop path).
+  - **Step 2 — TID summary table:** Snapshot from the latest `extracted_date`. One row per TID. Ticket counts (sum of `total_remaining`) bucketed into 0–2d, 3–7d, 8–13d, 14–30d windows. Computes `is_fully_unlimited_capacity` — TIDs with this TRUE must be excluded from supply scarcity analysis (unlimited-capacity slots represent `total_remaining = 1` as a system constant, not actual ticket count).
+  - **Step 3 — Daily time-series:** Tracks `extracted_date` trend per TID per bucket. Path B (pre within 30-day window): pre and post series overlaid. Path A (pre outside 30-day window): post only with an explicit data-unavailability note.
+  - **Path A vs Path B determination** added at the top of the section; determines whether pre/post comparison or snapshot-only is possible.
+  - **Broad-drop inventory path (Case C):** When S2C drops uniformly across all experiences with no concentration, pick the top 3 TGIDs by `users_select` volume from Q4 and run Step 2 for each. Same bucket depleted across all three → CE-wide supply constraint. All full → supply is not the mechanism.
+  - **Supply gate:** If Step 2 shows no depletion across limited-capacity TIDs, do not run Step 3; pivot to pricing or UX instead.
+  - Removed `count_days_available_30d` from `product_rankings_features` schema table.
+
+**`references/hypothesis.md`** — c016
+
+- All references to `count_days_available_30d` as an availability signal replaced with `inventory_availability` TID summary table (Step 2 from context.md).
+- **Gradual S2C decline:** Added `days_to_first_available_date` as a fast directional check before running inventory queries — an increasing trend confirms supply scarcity direction without a full TID query.
+- **CE-wide S2C drop (no concentration):** Updated to point to the broad-drop inventory path (top 3 TGIDs by volume, Step 2 for each).
+- **Vendor throttling pattern:** Signal updated from `count_days_available_30d` to `days_to_first_available_date` + 0–2d bucket ticket count from TID summary table.
+- **Experience-specific availability collapse:** Updated to run `inventory_availability` TID summary table and daily time-series instead of `count_days_available_30d`.
+
+**`references/actions.md`** — c017
+
+- RC2 (Inventory/availability constraint) signal updated: removed `count_days_available_30d` reference; replaced with `inventory_availability` TID summary table (near-zero ticket counts in one or more lead-time buckets) as the primary signal.
+
+**`references/report_structure.md`** — c018
+
+- "What belongs in Section 3" table: replaced "Availability proxy table" and "Inventory lead-time bucket table" rows with "Inventory TID summary table" (Step 2, one row per TID) and "Inventory daily time-series charts" (Step 3, one chart per lead-time bucket).
+- Section renamed from "Inventory lead-time bucket table format" to "Inventory section format".
+- Verdict forms updated from "window-specific spike / counts_zero_inventory" to "window-specific drop / ticket counts near zero".
+- Added supply gate outcome instruction: write a ruled-out callout and skip the table/charts entirely if Step 2 finds no depleted limited-capacity TIDs.
+- Added Path B spec: one row per TID, Pre/Post column pairs per bucket, `Capacity type` column, `highlight-row` on TID rows where the affected bucket pair shows the material drop, unlimited-capacity TIDs excluded from table with subtext note.
+- Added Path A spec: post-only columns, amber note above table stating pre-period unavailability.
+- Added daily time-series chart spec: four charts (one per bucket), Path B overlays pre/post, Path A post only.
+- Updated subtext guidance: state pattern, when it started, what supply team should verify. No mechanism assertions.
+- HTML pattern replaced: old format (rows per bucket, aggregate columns) replaced with two separate patterns — Path B (rows per TID, Pre/Post bucket columns) and Path A (rows per TID, post-only columns). Each with correct `highlight-row` usage and capacity-type column.
+
+**`references/q1_base.sql`** — c019
+
+- Removed `MAX(CASE WHEN page_type IN (...) THEN 1 ELSE 0 END) AS visited_lp` from SELECT; condition moved to WHERE clause. Fixed `GROUP BY 1, 2, 3, 9` → `GROUP BY 1, 2, 3, 8` to reflect the column count change.
+
+**`references/worked_example.md`** — c020
+
+- Removed `count_days_available_30d` from the S2C locus identification section (Example 2).
+- Added TID summary table query result to the transcript: shows `tickets_8_13d` and `tickets_14_30d` → 0 for all TIDs of TGID 8821, confirming the 8+ day window as the affected bucket.
+
+**`references/hypothesis.md`** — c021 (mix routing exit)
+
+- Mix routing exit path rewritten as a 3-level investigation: Level 1 (time the shift — when did the MB/HO mix change?), Level 2 (which sub-segment drove it — Paid/Organic/Channel?), Level 3 (URL impact — did the mix shift affect a specific landing page?). Each level has a Tier 1/2/3 structure with a declaration template.
+- LP2S Tier 1: added `browsing_country` (Geo/Non-Geo) as a parallel first-pass cut with drill-down guidance.
+- S2C Tier 1: added `browsing_country` (Geo/Non-Geo) as a parallel first-pass cut.
+- C2O C2A: added optional Geo/Non-Geo cut for broad drops with no device/experience concentration.
+
+**`references/report_structure.md`** — c022 (mix cascade block)
+
+- Added Mix cascade analysis block spec: `.analysis-block` with three sub-tables (one per cascade level). Each sub-table has a verdict line, `mix_effect`/`conv_effect` columns, and `highlight-row` on the fixed segment row. Routing exit variant renders only up to the exit level — if routing exits at Level 1, only the Level 1 table is shown.
+
+**`references/events.md`** — new file
+
+- New reference file documenting all GTM/Mixpanel funnel events used in CVR analysis: LP events (15 + 4 supporting), S2C events (14 + 3 supporting), C2O events (15 + 8 supporting). Each event includes key properties, analytical purpose, excluded noise events, and session join key notes.
+
+---
+
 ## [v1.5] — 2026-05-04 — Findings synthesis gate + Evaluator failure mode classification
 
 **Summary:** Two interconnected upgrades. (1) `SKILL.md` gains Step 2b: before writing any HTML, Claude writes `findings.md` with a mandatory Evidence inventory table where every claim must name its data source — closing the main hallucination vector where approximate values replaced confirmed BQ query outputs. (2) `evaluator.md` is redesigned to diagnose *why* each gap occurred, not just *what* was missing: every gap now gets a failure mode tag backed by a grounded citation, and a new Section 4 table maps all gaps directly to actionable skill file edits.

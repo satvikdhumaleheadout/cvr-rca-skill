@@ -118,66 +118,146 @@ Include only analyses that directly support or rule out a claim made in Sections
 | Experience-level breakdown | When drop is concentrated in specific experiences. |
 | URL-level breakdown | When drop is concentrated in specific page URLs. |
 | Lead-time distribution | When availability scarcity is the hypothesis — compare pre/post booking bucket distribution. |
-| Availability proxy table | When S2C hypothesis involves inventory — `count_days_available_30d` and `days_to_first_available_date` per experience. |
-| Inventory lead-time bucket table | When the availability proxy confirmed a drop for a specific experience — shows which lead-time window went empty. Present as a pre/post comparison by bucket. Always follows the availability proxy table; never shown without it. |
+| Inventory TID summary table | When S2C drop is confirmed at a specific TGID — one row per TID, columns: TID · TID Name · Tickets 0–2d · Tickets 3–7d · Tickets 8–13d · Tickets 14–30d. Snapshot from the latest available `extracted_date`. |
+| Inventory daily time-series charts | When the TID summary table shows depleted buckets — four line charts (one per lead-time bucket), `extracted_date` on x-axis, total tickets on y-axis. Path B: pre and post as overlaid series. Path A: post series only with a note that pre-period data is unavailable. |
 | Price analysis | When price changed and timing correlates with LP2S onset. |
 | Session recordings | When recordings were pulled — present as a structured table (see below). |
 
-### Inventory lead-time bucket table format
+### Inventory section format
 
-Present as a `.analysis-block` immediately after the availability proxy table, within the same S2C evidence section. The verdict line names the specific window that went empty, not just "availability dropped".
+Present as a `.analysis-block` within the S2C evidence section, immediately after the experience-level S2C breakdown confirms the TGID locus.
 
-**Two patterns, two verdict forms — use the one the data actually shows:**
+**Verdict line — two patterns, two forms:**
 
-- **Window-specific spike** (one bucket's `count_dates_zero_inventory` rises sharply, others hold):
-  - ✅ "The 7–13 day window lost available dates for Experience 8821 in the post period — near-term and far-future buckets unaffected. Points to a window-specific supply constraint."
-  - Highlight the spiked bucket(s) with `.highlight-row`.
+- **Window-specific drop** (one bucket near zero, others hold):
+  - ✅ "Ticket counts in the 8–13 day window for Experience 8821 fell to zero in the post period — the 0–7 day and 14–30 day buckets were unaffected. Points to a window-specific supply constraint."
+  - Highlight zero or near-zero bucket rows in the TID summary table with `.highlight-row`.
 
-- **Uniform decline** (all or most buckets declined together):
-  - ✅ "Available inventory fell across all lead-time windows for Experience 8821 — no single window is uniquely affected. Consistent with a platform-wide or full-product supply reduction."
-  - No `.highlight-row` — the finding is CE-wide, not bucket-specific.
+- **Uniform decline** (all buckets dropped together):
+  - ✅ "Ticket counts fell across all lead-time windows for Experience 8821 — no single window is uniquely affected. Consistent with a platform-wide or full-product supply reduction."
+  - No `.highlight-row` — the finding is product-wide, not bucket-specific.
 
-- ❌ "The following table shows availability by lead time." (describes the data, not the finding)
+- ❌ "The following table shows inventory by lead time." (describes data, not finding)
 
-**Table structure:** One row per lead-time bucket. Columns: Bucket · Pre dates with slots · Post dates with slots · Pre avg remaining · Post avg remaining · Pre zero-inventory dates · Post zero-inventory dates. Only include buckets that had meaningful activity in the pre period — empty pre-period buckets produce no signal and should be dropped.
+**Supply gate outcome (state before showing any table):** If Step 2 found non-depleted tickets across all limited-capacity TIDs, write: *"Inventory checked and ruled out — all limited-capacity TIDs have available tickets across all lead-time windows. Supply is not the mechanism for this S2C drop."* Do not show the TID table or charts; instead move directly to pricing or UX.
 
-**Subtext paragraph:** Describe the pattern the data shows and what it implies for the supply team to investigate. Do not assert a specific mechanism (allotment cut, bulk booking, cut-off setting) unless corroborating evidence from the investigation supports it — the table identifies *where* inventory collapsed, not *why*. The subtext should read: "The [window] collapse suggests a window-specific constraint — supply team should check [what to look at]", not "this was caused by X".
+**TID summary table — Path B** (pre within 30-day window): One row per TID. Columns: TID · TID Name · Pre tickets 0–2d · Post tickets 0–2d · Pre tickets 3–7d · Post tickets 3–7d · Pre tickets 8–13d · Post tickets 8–13d · Pre tickets 14–30d · Post tickets 14–30d. Where pre-to-post change in a bucket is the material drop, highlight that bucket pair with `.highlight-row`. Append a column `Capacity type` showing `Limited` or `Unlimited` (derived from `is_fully_unlimited_capacity`). Omit unlimited-capacity TIDs from the supply scarcity finding — note them in the subtext as "excluded from supply analysis (unlimited capacity)."
+
+**TID summary table — Path A** (pre outside 30-day window): Same structure but post-only columns (no pre). Add a block-level note above the table: *"Pre-period inventory data unavailable — pre period is more than 30 days ago. Current-state snapshot shown."*
+
+**Daily time-series charts:** Four charts, one per lead-time bucket. x-axis: `extracted_date`. y-axis: total tickets (scoped to one TID if Step 2 identified a single locus; TGID aggregate if all TIDs depleted equally). For Path B: two overlaid series — pre (blue) and post (red), aligned by day-of-period so the shapes are directly comparable. For Path A: post series only.
+
+**Subtext paragraph:** State the pattern and when it started, and what the supply team should check. Do not assert the mechanism — the data shows *where* and *when*, not *why*. Write: "The [bucket] bucket dropped from [X] to [Y] tickets starting around [date] — the other buckets were unaffected. Supply team should verify whether the cut-off period setting or allotment was changed around that date for TID [id]." Never write "this was caused by [specific mechanism]" without corroborating evidence from the supply team.
+
+**Path B — pre period within 30-day window (pre/post comparison available):**
 
 ```html
-<!-- Buckets shown here are illustrative — adapt to the CE's actual booking horizon.
-     Drop any bucket that was empty in the pre period (no signal = no row).
-     Remove highlight-row if the pattern is uniform across all buckets. -->
+<!-- One row per TID from Step 2 query results.
+     Apply highlight-row to TIDs where the affected bucket pair shows the material drop.
+     Remove highlight-row entirely if the pattern is uniform across all buckets (no single window is uniquely affected).
+     Omit rows where is_fully_unlimited_capacity = TRUE from the table body; list them in the subtext note instead. -->
 <div class="analysis-block">
-  <div class="block-title">Inventory availability by lead-time bucket — [Experience name]</div>
-  <div class="verdict-line">[State the actual pattern: window-specific spike OR uniform decline — use the correct verdict form from the spec above]</div>
+  <div class="block-title">Inventory by lead-time bucket — [Experience name]</div>
+  <div class="verdict-line">[State the actual pattern — window-specific or uniform decline — using the correct verdict form from the spec above]</div>
 
   <table>
     <thead>
       <tr>
-        <th>Lead-time bucket</th>
-        <th class="num">Pre: dates w/ slots</th>
-        <th class="num">Post: dates w/ slots</th>
-        <th class="num">Pre: avg remaining</th>
-        <th class="num">Post: avg remaining</th>
-        <th class="num">Pre: zero-inv dates</th>
-        <th class="num">Post: zero-inv dates</th>
+        <th>TID</th>
+        <th>TID Name</th>
+        <th class="num">Pre 0–2d</th>
+        <th class="num">Post 0–2d</th>
+        <th class="num">Pre 3–7d</th>
+        <th class="num">Post 3–7d</th>
+        <th class="num">Pre 8–13d</th>
+        <th class="num">Post 8–13d</th>
+        <th class="num">Pre 14–30d</th>
+        <th class="num">Post 14–30d</th>
+        <th>Capacity type</th>
       </tr>
     </thead>
     <tbody>
-      <!-- One row per bucket from actual query results. highlight-row on bucket(s)
-           that spiked (window-specific case only). -->
+      <!-- highlight-row on TIDs where the affected bucket pair is near zero in post -->
+      <tr class="highlight-row">
+        <td>[tour_id]</td>
+        <td>[tour_name]</td>
+        <td class="num">[n]</td><td class="num">[n]</td>
+        <td class="num">[n]</td><td class="num">[n]</td>
+        <td class="num">[n]</td><td class="num">[n]</td>
+        <td class="num">[n]</td><td class="num">[n]</td>
+        <td>Limited</td>
+      </tr>
       <tr>
-        <td>[bucket]</td>
+        <td>[tour_id]</td>
+        <td>[tour_name]</td>
         <td class="num">[n]</td><td class="num">[n]</td>
         <td class="num">[n]</td><td class="num">[n]</td>
         <td class="num">[n]</td><td class="num">[n]</td>
+        <td class="num">[n]</td><td class="num">[n]</td>
+        <td>Limited</td>
       </tr>
     </tbody>
   </table>
 
   <p style="font-size:13px;color:#555;margin-top:12px;">
-    [Describe the pattern and what it tells the supply team to investigate.
-     Do not assert a mechanism — the table shows where inventory collapsed, not why.]
+    [Describe the pattern — which bucket pair dropped, when it started, which TIDs are affected.
+     State what the supply team should check. Do not assert a mechanism — the table shows where and when, not why.
+     If any TIDs were excluded: "TID [id] ([name]) excluded from supply analysis — unlimited capacity."]
+  </p>
+</div>
+```
+
+**Path A — pre period outside 30-day window (post-only snapshot):**
+
+```html
+<!-- Pre-period data unavailable — show post-only columns.
+     Same row-per-TID structure; omit all Pre columns.
+     Add the block-level note above the table as shown. -->
+<div class="analysis-block">
+  <div class="block-title">Inventory by lead-time bucket — [Experience name]</div>
+  <div class="verdict-line">[State the actual pattern using the correct verdict form from the spec above]</div>
+
+  <p style="font-size:13px;color:#e07b00;margin-bottom:10px;">
+    Pre-period inventory data unavailable — pre period is more than 30 days ago. Current-state snapshot shown.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>TID</th>
+        <th>TID Name</th>
+        <th class="num">Tickets 0–2d</th>
+        <th class="num">Tickets 3–7d</th>
+        <th class="num">Tickets 8–13d</th>
+        <th class="num">Tickets 14–30d</th>
+        <th>Capacity type</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="highlight-row">
+        <td>[tour_id]</td>
+        <td>[tour_name]</td>
+        <td class="num">[n]</td>
+        <td class="num">[n]</td>
+        <td class="num">[n]</td>
+        <td class="num">[n]</td>
+        <td>Limited</td>
+      </tr>
+      <tr>
+        <td>[tour_id]</td>
+        <td>[tour_name]</td>
+        <td class="num">[n]</td>
+        <td class="num">[n]</td>
+        <td class="num">[n]</td>
+        <td class="num">[n]</td>
+        <td>Limited</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p style="font-size:13px;color:#555;margin-top:12px;">
+    [Describe which buckets show near-zero tickets and what the supply team should verify.
+     If any TIDs were excluded: "TID [id] ([name]) excluded from supply analysis — unlimited capacity."]
   </p>
 </div>
 ```

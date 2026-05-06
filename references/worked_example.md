@@ -114,17 +114,24 @@ L0: S2C (83% Δ) · sharp break Apr 14 · structural −4.1pp
 ## L1 — S2C driver identification
 ### Experience-level S2C + availability · MB vs HO S2C split — parallel
 
-**Experience-level S2C with availability proxy**
+**Experience-level S2C breakdown**
 Query: COUNT(DISTINCT user_id), S2C rate by experience_id pre vs post.
-  Join product_rankings_features on experience_id + event_date for
-  count_days_available_30d.
 Result:
-  TGID 8821 (Seine Dinner Cruise): S2C 24% → 9%. count_days_available_30d 38 → 11.
+  TGID 8821 (Seine Dinner Cruise): S2C 24% → 9%.
     1,840 select users post. Rate −15pp, checkouts lost ≈276.
-  TGID 8834 (Seine Sightseeing 1hr): S2C 19% → 16%. Avail 42 → 38. Noise level.
+  TGID 8834 (Seine Sightseeing 1hr): S2C 19% → 16%. Noise level.
   All other TGIDs: <5pp rate change.
-→ CONFIRMED — TGID 8821 is the locus. Opens L2a: why did availability drop Apr 14?
+→ CONFIRMED — TGID 8821 is the locus. Run inventory_availability TID summary table.
   Closes: broad platform/UX hypothesis (would show uniform drop, not one TGID).
+
+**Inventory TID summary table for TGID 8821**
+Query: TID summary from latest extracted_date snapshot (Path B — pre within 30d window).
+Result (tickets by lead-time bucket, post snapshot vs pre snapshot):
+  TID 30112 (Dinner Cruise 7pm): tickets_0_2d 22→18, tickets_3_7d 14→11,
+    tickets_8_13d 180→0, tickets_14_30d 340→0.
+  TID 30113 (Dinner Cruise 9pm): tickets_8_13d 210→0, tickets_14_30d 290→0.
+→ CONFIRMED — 8–13d and 14–30d buckets went to zero for all TIDs. Near-term (0–7d)
+  unaffected. Opens L2a: when did the 8+ day window collapse?
 
 **MB vs HO S2C split**
 Query: S2C rate by is_microbrand_page, pre vs post.
@@ -150,8 +157,8 @@ On or around Apr 14, the supply partner for TGID 8821 (Seine Dinner Cruise)
 closed inventory for all dates beyond ~7 days. HO users with planned trip dates
 reach the select page and find no available dates, driving S2C from 24% to 9%
 on 1,840 users — a loss of ~276 checkouts and 83% of the ΔCVR. Availability
-proxy (count_days_available_30d: 38 → 11) and lead time collapse (8+ day
-bookings down 75–83%) both confirm the mechanism. Session recordings: users
+TID summary table (tickets_8_13d and tickets_14_30d → 0 for all TIDs of 8821)
+and lead time collapse (8+ day bookings down 75–83%) both confirm the mechanism. Session recordings: users
 consistently see an empty date picker beyond the current week on the 8821 page.
 ```
 
