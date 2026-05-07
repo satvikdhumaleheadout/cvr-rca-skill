@@ -367,6 +367,38 @@ Investigation direction: why did [segment] lose volume? (no funnel deep-dive nee
 Every funnel query after a conversion-path cascade must carry the fixed
 segment filters. Do not run funnel analysis on the full CE population.
 
+### Geo overview (always run after the cascade declares its outcome)
+
+Run this once after the fixed segment is declared. It uses the same fixed segment filters as all other post-cascade analysis. The purpose is to flag whether the CVR drop was concentrated in domestic users (Geo) or international users (Non-Geo), and to surface the top countries by volume.
+
+**This is a diagnostic, not a fixation.** The finding is never carried as a filter into downstream queries — inventory queries (`inventory_availability`) have no user geography, and price queries (`product_rankings_features`) are product-level only. The geo table informs hypothesis direction; it does not change the analysis scope.
+
+**Pre-step — look up the CE's home country:**
+
+```sql
+SELECT DISTINCT country
+FROM `headout-analytics.analytics_reporting.dim_experiences`
+WHERE combined_entity_id = '<ce_id>'
+  AND country IS NOT NULL
+LIMIT 1
+```
+
+Use `dim_experiences.country` — not `dim_combined_entities.country`, which can be NULL for sheet-only CEs.
+
+**Query (use the full fixed segment from the cascade):**
+
+See the full query under `Dimensions to Query and When → Geo vs Non-Geo`. It already carries `is_microbrand_page` and `channel_name` filters for the fixed segment. Substitute the CE's home country as `<CE_COUNTRY>`.
+
+**Four outcomes — state which applies:**
+
+- **Geo-concentrated** (Geo rate dropped materially, Non-Geo held): The drop is domestic. In the report, present the geo table then add a callout: *"This drop is concentrated in domestic (home-market) users. Note: downstream analysis — inventory, pricing, and supply-side queries — is not filtered by geography. Geo-specific root causes (local supply, domestic pricing, geo-targeted campaign) should be investigated separately with the supply and BDM teams."* In the investigation, prioritise domestic supply and pricing hypotheses for the affected funnel step.
+
+- **Non-Geo-concentrated** (Non-Geo rate dropped, Geo held): The drop is in international traffic. In the report, add the same note about downstream analysis not being geo-filtered. Prioritise language/UX friction and international supply hypotheses downstream.
+
+- **Uniform** (both Geo and Non-Geo dropped similarly): Not a geographic issue. State this and continue — no additional callout needed.
+
+- **Mix-dominant** (Geo/Non-Geo share shifted while per-group rates held): A routing story — e.g., a geo-targeted campaign paused and shifted composition toward lower-CVR international traffic. Report this as a traffic mix change, not a funnel quality issue.
+
 ---
 
 ## Data Source — The Funnel Table
@@ -758,34 +790,23 @@ LEFT JOIN `headout-analytics.analytics_reporting.dim_experiences` AS de
 
 **Join path to get from `combined_entity_id` → inventory:** `dim_experiences` has no `tour_id` column; `inventory_availability` has no `experience_id` column. The bridge is `dim_tours`, which carries both `tour_id` and `experience_id`. Always use the two-hop pattern: `dim_experiences (experience_id) → dim_tours (experience_id → tour_id) → inventory_availability (tour_id)`.
 
-**Inventory analysis — Path A vs Path B**
+**Data availability — check before querying:**
 
-Before running any inventory query, determine which path applies based on how far back the pre period reaches:
+The table retains a 30-day rolling window. What's available depends on how old the RCA period is:
 
-- **Path B** (both periods within window): `pre_start >= CURRENT_DATE - 30`. Full pre/post comparison is available. Run both the TID summary table (Step 2) and the daily time-series (Step 3) with pre and post period tagging.
-- **Path A** (pre period outside window): `pre_start < CURRENT_DATE - 30`. `inventory_availability` only holds 30 days of history — the pre period has zero rows. Run the TID summary table for current state and the daily time-series for the post period only. State this limitation explicitly in the report: *"Pre-period inventory data is unavailable (pre period is more than 30 days ago); current-state snapshot shown for post period only."*
+- **Both periods in window** (`pre_start >= CURRENT_DATE − 30`): Full pre/post time-series available. The daily time-series query will return rows for both pre and post periods.
+- **Pre period outside window** (`pre_start < CURRENT_DATE − 30`, `post_end >= CURRENT_DATE − 30`): The pre period has no rows — the window does not reach back that far. The TID snapshot reflects current state; the daily time-series covers the post period only. State this in the report.
+- **Entire period outside window** (`post_end < CURRENT_DATE − 30`): No rows exist for the RCA period. Skip both queries. State this explicitly: *"Inventory data is unavailable for this RCA period — post period ended more than 30 days ago. Supply cannot be confirmed or ruled out from inventory data alone."*
 
-**Note on `total_remaining` for unlimited slots:** `inventory_availability` represents unlimited-capacity time slots as `total_remaining = 1` per slot (not actual capacity). Zero reliably signals sold-out; a non-zero value from an unlimited-capacity TID does not indicate scarce supply. Use `count_unlimited_time_slots` vs `count_limited_time_slots` to distinguish if needed — an S2C drop from unlimited-capacity TIDs almost never traces to a capacity constraint.
+**For TGID selection and the inventory investigation decision tree (when to run these queries, how to interpret results, broad-drop path), see `hypothesis.md → S2C investigation → inventory branch`.**
 
-**Step 1 — Identify the TGID locus (or loci) using Q4**
+**Note on `total_remaining` for unlimited slots:** `inventory_availability` represents unlimited-capacity time slots as `total_remaining = 1` per slot (not actual capacity). Zero reliably signals sold-out; a non-zero value from an unlimited-capacity TID does not indicate scarce supply. An S2C drop from unlimited-capacity TIDs almost never traces to a capacity constraint.
 
-Do not run inventory queries for the whole CE. Use Q4 results (`experience_id` × S2C pre/post) to compute `lost_checkouts_delta` for each TGID:
+**TID snapshot query**
 
-```
-lost_checkouts_delta = users_select_post × (s2c_rate_pre − s2c_rate_post)
-```
+Returns one row per TID with ticket counts (`sum(total_remaining)`) bucketed into four lead-time windows, from the latest available `extracted_date`. This is today's inventory state — not the post period. Use it to identify which TIDs exist, flag unlimited-capacity TIDs, and scope the daily time-series query. The supply verdict comes from the time-series, not this snapshot.
 
-Sort TGIDs by `lost_checkouts_delta` descending. Three cases determine what to run next:
-
-- **Case A — Single dominant TGID** (top TGID accounts for ≥60% of total `lost_checkouts_delta`): That TGID is the locus. Run Steps 2–3 for it only.
-- **Case B — Multiple significant TGIDs** (2–3 TGIDs each contribute ≥10% of total `lost_checkouts_delta`): All are candidate loci. Run Step 2 for each (up to 3). Run Step 3 only for those where Step 2 confirms supply depletion.
-- **Case C — Uniform drop** (no single TGID accounts for ≥10%, loss is spread evenly): Not an experience-level issue. Skip Steps 2–3 here — see the *Broad-drop inventory path* at the end of this section.
-
-One TGID maps to multiple TIDs — different time slots, language variants, or ticket types all under the same tour group. Steps 2–3 always operate at TID level within a TGID.
-
-**Step 2 — TID summary table (current-state snapshot)**
-
-Run for both Path A and Path B. Always run against the latest available `extracted_date` in `inventory_availability`. Presents one row per TID with ticket counts (sum of `total_remaining`) aggregated into four lead-time buckets. A TID with zero across all buckets is currently sold out for all upcoming dates in the window.
+`is_fully_unlimited_capacity`: if TRUE, all time slots for that TID are uncapped — `total_remaining = 1` is a system constant, not real seat count. Do not flag these TIDs as supply-constrained. `total_remaining = 0` is still valid (the slot was removed entirely).
 
 ```sql
 -- Bridge: dim_experiences has no tour_id; inventory_availability has no experience_id.
@@ -851,17 +872,17 @@ GROUP BY 1, 2
 ORDER BY 1
 ```
 
-**Step 3 — Daily time-series per lead-time bucket**
+**Daily time-series query**
 
-Run for both paths. Produces one row per `extracted_date` with total tickets in each lead-time bucket. This feeds four line charts — one chart per bucket, `extracted_date` on the x-axis, ticket count on the y-axis. For Path B, the `period` column enables overlaying pre and post as separate series. For Path A, all rows will have `period = 'post'`.
+Produces one row per `extracted_date` with total tickets in each lead-time bucket. This is the primary supply RCA evidence — it shows whether inventory was depleted at the time of the S2C drop, not just today. Feed this into four Plotly line charts (one per bucket), `extracted_date` on x-axis, ticket count on y-axis. When both periods are in the 30-day window, the `period` column enables overlaying pre and post as separate series.
 
-**TID scoping for Step 3 — use the Step 2 results to decide:**
-- **One TID is the locus** (its buckets near-zero while other TIDs hold tickets): filter to that TID by setting `<scope_filter>` = `dt.tour_id = '<tid_id>'` in the WHERE below.
-- **All TIDs depleted equally**: aggregate the whole TGID by setting `<scope_filter>` = `de.experience_id = '<tgid>'`.
+**Scoping:** Set `<scope_filter>` to scope the query to a specific TID or the full TGID:
+- `dt.tour_id = '<tid_id>'` — when a single TID is the identified locus
+- `de.experience_id = '<tgid>'` — when checking the full TGID
 
-**Date range parameters** — set `<series_start>` and `<series_end>` based on path:
-- Path B (`pre_start >= CURRENT_DATE - 30`): `series_start = pre_start`, `series_end = post_end`
-- Path A (`pre_start < CURRENT_DATE - 30`): `series_start = post_start`, `series_end = post_end`
+**Date range:** Set `<series_start>` and `<series_end>` based on data availability:
+- Both periods in window: `series_start = pre_start`, `series_end = post_end`
+- Pre outside window: `series_start = post_start`, `series_end = post_end`
 
 ```sql
 WITH tgid_tours AS (
@@ -901,29 +922,19 @@ GROUP BY 1, 2
 ORDER BY 1
 ```
 
-**Interpreting results:**
+**Interpreting the time-series charts:**
 
-**Unlimited capacity check (do this first):** Before calling any TID supply-constrained, check `is_fully_unlimited_capacity` in the Step 2 results. If `TRUE`, that TID's time slots are uncapped — `total_remaining` is 1 per slot as a system constant, not real seat count. Do not flag such TIDs as supply-constrained based on low ticket values alone. `total_remaining = 0` is still a real signal (the slot was removed). Only proceed with supply analysis for TIDs where `is_fully_unlimited_capacity = FALSE`.
+Before drawing any supply conclusion, compare the *timing* of any ticket drop to the timing of the S2C drop.
 
-**Supply gate (before running Step 3):** If Step 2 shows non-depleted tickets across all limited-capacity TIDs for the confirmed TGID(s), supply is not the mechanism — do not run Step 3. Pivot instead to pricing (Q5 price trend for the concentrated TGID) or select-page UX investigation. Only run Step 3 when at least one limited-capacity TID shows a materially depleted bucket.
+- **Tickets low or zero throughout the post period** → supply constraint was active when S2C dropped. This is the key RCA pattern.
+- **Tickets healthy during post, then dropped near today's date** → the historical S2C drop was not caused by this supply constraint. The current depletion is a separate event.
+- **Tickets declined mid-way through the post period** → match the onset date to when S2C began falling. If they coincide → supply is the mechanism; if they diverge → investigate the non-overlapping interval separately.
 
-**TID summary table (Step 2):** Compare ticket counts across TIDs within the same bucket. A TID with zero tickets in a bucket that was non-zero in Path B's pre period is the supply locus. For Path A, zero across all buckets indicates current sell-out with no historical baseline.
+**Check `is_fully_unlimited_capacity` first:** Before flagging any TID as supply-constrained, verify it is not fully unlimited-capacity in the TID snapshot. `total_remaining = 1` for such TIDs is a system constant, not real scarcity.
 
-**Daily time-series (Step 3):** A sustained downward trend in one bucket starting near the post period onset, while other buckets hold, identifies the specific lead-time window affected. All buckets declining together indicates a product-wide supply reduction.
-
-- **One bucket drops, others hold** → window-specific constraint (allotment cut, bulk booking, cut-off change). Name the pattern and flag for the supply team — do not assert the mechanism without corroborating evidence.
+Additional patterns (apply after the timing check):
+- **One bucket drops, others hold** → window-specific constraint (allotment cut, bulk booking, cut-off change). Flag for the supply team; do not assert the mechanism without corroborating evidence.
 - **All buckets drop** → product-wide or platform-wide supply reduction (product paused, vendor pulled all inventory).
-
----
-
-**Broad-drop inventory path (Case C — uniform S2C drop, no TGID concentration)**
-
-When Q4 shows no TGID accounts for ≥10% of lost checkouts (the S2C drop is spread evenly across all experiences), this is not an experience-level supply issue. To confirm whether availability dropped CE-wide:
-
-Pick the **top 3 TGIDs by `users_select` volume** from Q4 (not by S2C drop — by raw traffic). Run Step 2 (TID summary table) for each. Two outcomes:
-
-- **Same bucket depleted across all three TGIDs** → CE-wide supply constraint. A platform-level cut-off period change or vendor pulling all inventory would produce exactly this pattern. Escalate to the supply team with the specific bucket and onset date from the time-series.
-- **Tickets full across all three TGIDs** → supply is not the mechanism. Focus on checkout flow changes or variant selection UX (a UI change that affected all experiences equally would produce a uniform S2C drop with no experience concentration).
 
 ---
 
@@ -1218,3 +1229,8 @@ thinking and makes the inference scannable.
 | c010 | 2026-04-29 | Mix Cascade redesigned as routing vs conversion determination. Each of the three levels (MB/HO, Paid/Organic, Channel) now has an explicit mix-check: compute mix_effect vs conversion_effect; if mix dominates exit as routing story at that level, if conversion dominates fix the segment and descend. Two transcript declaration forms added (conversion path vs routing exit). |
 | c013 | 2026-05-04 | Added "Geo vs Non-Geo" dimension under "Dimensions to Query and When": pre-step CE country lookup via `dim_experiences.country` (not `dim_combined_entities.country` which can be NULL), country-level breakdown query returning top 5 countries by combined pre+post volume with home country always included, `geo_segment` label (Geo/Non-Geo/Unknown) on each row, and interpretation guide for per-country signals and cross-dimensional intersections (country × language, country × experience_id). |
 | c014 | 2026-05-05 | Fixed two bugs in the inventory lead-time bucket query: (1) The query was CE-wide — fetched all tour_ids for the CE instead of filtering to the specific TGID confirmed as the locus. Now filters to `experience_id = '<tgid>'` in the `tgid_tours` CTE. (2) `COUNTIF(total_remaining = 0)` counted TID × date combinations where any single TID had zero remaining — overcounting sold-out dates for TGIDs with multiple TIDs (time slots, variants). Fixed by adding a `tgid_daily_inventory` CTE that sums `total_remaining` and `count_time_slots` across all TIDs per `extracted_date × experience_date` before bucketing. `COUNTIF(date_total_remaining = 0)` now correctly identifies dates where ALL TIDs have zero remaining (i.e., truly sold out from the user's perspective). Added explanatory note on why the TID aggregation step matters. |
+| c015 | 2026-05-06 | Inventory analysis redesign — Phase 1: Removed `count_days_available_30d` from `product_rankings_features` schema (unreliable proxy — no remaining check, no is_chosen filter, TGID-level only). Removed `analytics_intermediate.inventory_changes` fallback section. Replaced entire inventory section with Path A/B architecture: Path B (pre within 30-day window) shows full pre/post comparison; Path A (pre > 30 days ago) shows post-only with explicit limitation note. New Step 2 (TID summary table): one row per TID with tickets by lead-time bucket from latest extracted_date snapshot. New Step 3 (daily time-series): per-bucket ticket counts per extracted_date feeding 4 line charts; scoped to single TID locus or full TGID aggregate based on Step 2 results. Updated `dim_experiences.is_available` note and `inventory_availability` window note to remove `count_days_available_30d` references. Updated "Experience-level with availability proxy" section to go directly from TGID locus → inventory queries. |
+| c017 | 2026-05-06 | Added "Geo overview" as a standalone post-cascade check (not a cascade level). Always runs after the fixed segment is declared, using the full cascade fixed-segment filters. Produces Geo vs Non-Geo CVR + top 5 countries by volume via the existing query in "Dimensions to Query and When → Geo vs Non-Geo". Four outcomes: Geo-concentrated, Non-Geo-concentrated, uniform, mix-dominant. When geo-concentrated, report includes an explicit callout that downstream analysis (inventory, pricing) is not geo-filtered and geo-specific root causes require separate supply/BDM investigation. No downstream fixation — geo is diagnostic only. |
+| c016 | 2026-05-06 | Inventory analysis redesign — Phase 2 (gap fixes): (1) Step 1 expanded to 3-case TGID locus identification using `lost_checkouts_delta` as ranking metric: Case A (≥60% in one TGID → single locus), Case B (2–3 TGIDs each ≥10% → run Step 2 for each), Case C (uniform drop → broad-drop path). (2) Step 2 query extended with `is_fully_unlimited_capacity` flag (derived from `count_unlimited_time_slots` and `count_limited_time_slots`) — prevents misreading unlimited-capacity TIDs as supply-constrained. (3) Supply gate added: if Step 2 shows full tickets for all limited-capacity TIDs, supply is ruled out and Step 3 is skipped; pivot to pricing instead. (4) Broad-drop inventory path section added for Case C: run Step 2 for top 3 TGIDs by volume; same bucket depleted across all = CE-wide constraint; full tickets = not supply. (5) Step 3 SQL parameterized with `<scope_filter>`, `<series_start>`, `<series_end>` — replaces ambiguous commented-out WHERE alternatives. |
+| c018 | 2026-05-06 | Fixed critical inventory RCA design flaw: Step 2 uses MAX(extracted_date) = today's snapshot, so it cannot confirm or rule out historical supply causes. (1) Added Path X: post_end < CURRENT_DATE - 30 → no inventory data for the RCA period at all; skip Steps 2–3 and state limitation explicitly. (2) Path A qualification tightened: now explicitly requires post_end >= CURRENT_DATE - 30 to distinguish from Path X. (3) Step 2 reframed as "current-state orientation only" — scope Step 3 and flag unlimited-capacity TIDs; do NOT gate the supply verdict. (4) Removed supply gate paragraph (was wrong: gated Step 3 on today's snapshot even when S2C drop was weeks ago). (5) Step 3 reframed as "primary RCA evidence — always run" regardless of Step 2 results. (6) Step 3 interpretation expanded with three line chart timing scenarios: tickets low throughout post (supply active during drop), tickets healthy during post then dropped recently (supply is NOT the historical cause), tickets declined mid-post (onset matches S2C drop → supply is mechanism). |
+| c019 | 2026-05-07 | Structural separation: investigation decision logic moved out of context.md into hypothesis.md. context.md now owns only schema, data-availability facts, SQL queries (renamed from "Step 2/3" to "TID snapshot query" / "Daily time-series query"), and chart interpretation guide. Removed: Step 1 locus identification (Case A/B/C + lost_checkouts_delta), Path A/B/X as decision framing, TID scoping decision block, broad-drop inventory path (Case C). Added pointer: "For TGID selection and the inventory investigation decision tree, see hypothesis.md → S2C investigation → inventory branch." |

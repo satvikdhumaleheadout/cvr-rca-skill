@@ -186,10 +186,8 @@ Work through two tiers in order.
 - `device_type` × S2C rate pre/post — a mobile-concentrated drop points to a
   select-page UX or rendering issue specific to small screens
 - `experience_id` × S2C rate pre/post — a drop in specific experiences points
-  to a supply or pricing issue for those products. When you find this, run the
-  `inventory_availability` TID summary table and daily time-series for the
-  affected TGID (see `context.md → inventory analysis`) to confirm availability
-  is the mechanism.
+  to a supply or pricing issue for those products. When you find this, follow
+  the inventory investigation sequence below.
 - `browsing_country` (Geo/Non-Geo) × S2C rate — a Geo-only S2C drop points to
   local supply scarcity or a pricing shock visible at the variant-selection step
   for domestic users; a Non-Geo country drop points to language/UX friction at
@@ -207,16 +205,37 @@ Work through two tiers in order.
   windows. Also check `language` — international visitors may be browsing in
   English while the experience has limited English-language variants.
 
-**If experience concentrates:**
-- For **gradual S2C decline** (drift over multiple weeks, not a sudden drop): first pull `days_to_first_available_date` from `product_rankings_features` for the concentrated TGID pre vs post. An increasing trend means users see a progressively thinner near-term calendar on the select page — supply scarcity is structural, not event-triggered. This is a fast check to confirm supply direction before running inventory queries.
-- Run the `inventory_availability` TID summary table (Step 2) — if tickets are depleted for at least one limited-capacity TID, supply is the mechanism. If tickets are full, supply is ruled out — pivot to pricing (Q5).
-- When Step 2 confirms supply depletion, run the daily time-series (Step 3) to identify *which lead-time window* declined and *when* — this gives the supply team a specific window, TID, and onset date to investigate.
-- Cross-check with `lead_time_days` distribution from the funnel table — if users shifted toward longer lead times AND that same window is empty in `inventory_availability`, the shift is supply-caused, not behavioural.
+**If experience concentrates — inventory investigation sequence:**
+
+**1. Select which TGIDs to investigate.** From the experience × S2C results, compute `lost_checkouts_delta` for each TGID:
+```
+lost_checkouts_delta = users_select_post × (s2c_rate_pre − s2c_rate_post)
+```
+Sort descending. Three situations determine what to do next:
+- **Single dominant TGID** (≥60% of total `lost_checkouts_delta`): Run the inventory queries for that TGID only.
+- **Multiple significant TGIDs** (2–3 TGIDs each contributing ≥10%): Run the inventory queries for each (up to 3).
+- **Uniform drop** (no TGID ≥10%): Skip to the *broad-drop path* at the bottom of this section.
+
+One TGID maps to multiple TIDs (time slots, language variants, ticket types). The queries in `context.md → inventory analysis` always operate at TID level within a TGID.
+
+**2. Check data availability** (see `context.md → inventory availability → data availability`). If the entire RCA period is outside the 30-day window, skip the inventory queries and state the data limitation.
+
+**3. For a gradual S2C decline** (drift over multiple weeks): before running inventory queries, pull `days_to_first_available_date` from `product_rankings_features` for the concentrated TGID pre vs post. An increasing trend (users see a progressively thinner near-term calendar) confirms supply scarcity direction quickly. This is a fast pre-check, not a substitute for the inventory queries.
+
+**4. Run the TID snapshot query** (from `context.md → inventory analysis`). Use the results to:
+- Flag unlimited-capacity TIDs (`is_fully_unlimited_capacity = TRUE`) — exclude from supply analysis
+- Identify which TID(s) have near-zero tickets to scope the time-series query
+
+**5. Run the daily time-series query** (from `context.md → inventory analysis`). This is the primary supply evidence — it shows whether inventory was depleted when the S2C drop happened, not just today. Always run regardless of what the snapshot showed. Interpret using the timing guide in `context.md`.
+
+**6. Confirm or rule out supply.** If the time-series shows tickets were healthy throughout the post period → supply is not the mechanism; pivot to pricing. If tickets were low or zero during the post period → supply is the mechanism. Cross-check with the `lead_time_days` distribution from the funnel table — users shifting to longer lead times when that same window is empty confirms supply is causal, not behavioural.
 
 **Tier 2 — If no dimension concentrates (drop is broad):**
 A CE-wide S2C drop with no language/device/experience concentration is unusual. Check two things: (1) was there a change in the checkout flow or variant selection UI? (2) did availability drop uniformly across all experiences?
 
-To check (2): pick the top 3 TGIDs by `users_select` volume from Q4 and run the TID summary table (Step 2 from `context.md → inventory analysis`) for each. If the same lead-time bucket is depleted across all three TGIDs → CE-wide supply constraint (cut-off period change, vendor pulling all inventory — see *Broad-drop inventory path* in context.md). If tickets are full across all three → supply is not the mechanism; focus on checkout flow or variant selection UX that changed uniformly across all experiences.
+To check (2) — **broad-drop inventory path**: pick the top 3 TGIDs by `users_select` volume from Q4 (by raw traffic, not by S2C drop) and run the TID snapshot and daily time-series queries for each. Two outcomes:
+- **Same lead-time bucket depleted across all three TGIDs** → CE-wide supply constraint (platform-level cut-off period change, vendor pulling all inventory). Escalate to the supply team with the specific bucket and onset date.
+- **Tickets healthy across all three TGIDs** → supply is not the mechanism. Focus on checkout flow or variant selection UX changes that affected all experiences equally.
 
 ### C2O — first-pass branches
 
@@ -483,3 +502,5 @@ Before diagnosing any funnel step: if mix is dominant, the story is about traffi
 | c003 | 2026-04-24 | Added "URL concentration" preamble section before Pattern 1 — URL-level concentration is now a first-class hypothesis for all four primary driver types (mix, LP2S, S2C, C2O), with volume filter requirement and pointer to majority-contributor principle in SKILL.md |
 | c004 | 2026-04-29 | Restructured as two-level reference: Level 1 (L0 routing map + first-pass branch sets by funnel step) moved from context.md; Level 2 (historical patterns) retained. "How to use this file" updated to reflect full role as the central branch reference for all investigation levels. |
 | c005 | 2026-04-29 | L0 routing table rewritten: first rows now show cascade exit conditions (mix exit at Level 1/2/3) before the Shapley rows, reflecting that the cascade runs first and Shapley rows apply only after a conversion-path cascade completes. mix_dominance.is_dominant = true row removed — mix determination happens through cascade levels, not as a pre-gate. |
+| c006 | 2026-05-06 | Inventory-related gaps fixed across S2C investigation branches: (1) Removed all `count_days_available_30d` references — replaced with direct `inventory_availability` TID summary table checks. (2) "If experience concentrates" branch restructured: `days_to_first_available_date` from `product_rankings_features` added as fast pre-check for gradual S2C declines; Step 2 TID summary table now serves as the supply gate (full tickets = pivot to pricing, depleted = run Step 3). (3) Tier 2 broad-drop path made concrete: pick top 3 TGIDs by volume, run Step 2 for each; same bucket depleted across all = CE-wide constraint; full across all = not supply. (4) Pattern 4 vendor throttling signal updated: `count_days_available_30d` replaced with `days_to_first_available_date` + 0–2d bucket from `inventory_availability`. (5) Pattern 10 experience availability collapse: updated to point to TID summary table + daily time-series. |
+| c007 | 2026-05-07 | Inventory investigation decision logic moved here from context.md. "If experience concentrates" branch now owns the full investigation sequence: (1) TGID selection via lost_checkouts_delta + three-case classification (single dominant / multiple significant / uniform drop); (2) data availability check; (3) optional gradual-decline pre-check; (4) TID snapshot query usage; (5) daily time-series query usage; (6) supply confirm/rule-out decision. Broad-drop path (uniform drop) moved here from context.md. Removed "Step 2/3" label references throughout — queries now referenced as "TID snapshot query" and "daily time-series query". |

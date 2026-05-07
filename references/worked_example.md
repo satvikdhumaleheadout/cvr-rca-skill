@@ -191,3 +191,4 @@ Sections not present: LP2S deep-dive, C2O section (each <10% of ΔCVR).
 | c001 | 2026-04-27 | Created — moved from SKILL.md as part of process/domain separation |
 | c002 | 2026-04-27 | Rewritten to show investigation tree traversal with parallel query batches |
 | c003 | 2026-04-27 | Added tree map block to both transcripts — shows full branch structure with CONFIRMED/RULED OUT/LEAF outcomes before detail sections |
+| c004 | 2026-05-06 | Updated Paris river cruise example to match new inventory architecture: (1) Experience-level S2C step no longer pulls `count_days_available_30d` from `product_rankings_features`; TGID 8821 is confirmed purely from the S2C rate drop. (2) Added TID summary table result for TGID 8821 showing per-TID ticket depletion by bucket (tickets_8_13d and tickets_14_30d → 0 for all TIDs). (3) Root cause summary updated: replaced `count_days_available_30d: 38 → 11` with TID summary table finding. |

@@ -222,3 +222,4 @@ Actions are drawn from historical Headout RCAs across 21 MMPs and the CVR Cause-
 |---|------|---------|
 | c001 | 2026-04-24 | Initial version — 10 root causes drawn from 21 historical Headout MMPs and CVR Cause-to-Action Playbook |
 | c002 | 2026-04-24 | RC1: added competitive intel skill pointer (P1, S2C context). RC2: added inventory skill pointer to lead-time bucket action. RC8: added pax setup skill pointer (P1). RC9: added `order_attempted_events_v2` column detail with note that automated query support is in development. RC10: added content audit sub-skill pointer (P1) |
+| c003 | 2026-05-06 | RC2 signal updated: replaced `count_days_available_30d` (unreliable proxy) with ticket counts in lead-time buckets from `inventory_availability` TID summary table as the primary signal for inventory constraint root cause. |
