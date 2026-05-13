@@ -55,7 +55,7 @@ find or what to hypothesize next. What you find determines that.
 
 The investigation is complete when you reach a leaf (a specific mechanism at a
 specific segment, experience, URL, or date). It is not complete when the list
-below is exhausted. If you've run all the tiers and have no leaf, that is a
+below is exhausted. If you've run all the cuts and have no leaf, that is a
 signal to look more carefully at what the data already showed — a surprising
 number, an unexplained gap, a dimension that partially concentrated — and form
 a new hypothesis from it.
@@ -88,10 +88,6 @@ Tier 3 — URL impact: query `COUNT(DISTINCT user_id)` by `page_url` for HO
 sessions pre vs post. Which collection or experience pages lost HO traffic?
 Those are the specific pages Marketing needs to look at.
 
-Declare: "HO traffic dropped [X%] starting [week]. Concentrated in [language /
-market]. Affected pages: [top URLs by volume loss]. Marketing investigation
-needed — conversion rates within HO were flat."
-
 ---
 
 **Level 2 exit — Paid vs Organic share shifted within fixed brand**
@@ -109,9 +105,6 @@ Tier 3 — URL impact: query `COUNT(DISTINCT user_id)` by `page_url` for the
 declining paid channel pre vs post. Which landing pages did the campaign stop
 serving traffic to?
 
-Declare: "Paid traffic dropped [X%] starting [date]. Channel: [X]. Affected
-pages: [top URLs]. Marketing owns — conversion rates within Paid were flat."
-
 ---
 
 **Level 3 exit — Channel share shifted within Paid**
@@ -125,10 +118,6 @@ Tier 2 — URL impact: query `COUNT(DISTINCT user_id)` by `page_url` for the
 losing channel pre vs post. Which specific listing or collection pages were that
 channel's primary landing pages? Those are what dropped.
 
-Declare: "[Channel A] lost [X%] impression share to [Channel B] starting
-[week]. Affected pages: [top URLs]. Conversion rates within [Channel A] were
-flat — this is a spend/allocation story, not a product story."
-
 ---
 
 For all three levels: the finding is complete when you can name the shift week,
@@ -139,9 +128,10 @@ were flat (that is why the cascade exited). Marketing owns the routing story.
 ### LP2S — first-pass branches
 
 LP2S is about whether users landing on the listing page click through to the
-select page. Work through three tiers in order — don't skip ahead.
+select page.
 
-**Tier 1 — Run dimension cuts in parallel (first batch):**
+**Run dimension cuts in parallel:**
+- `page_url` × LP2S rate and volume — check both independently: (1) did traffic shift between URLs — some pages gaining volume, others losing? That is a routing story; traffic moved toward lower-converting pages. (2) did LP2S rate drop on specific URLs while others held flat? That points to something that changed on those pages (template, listed experiences, pricing). A uniform rate drop across all high-traffic URLs points to a CE-wide mechanism. Apply a majority-contributor filter — exclude long-tail URLs that represent a small share of CE LP traffic, as their rate estimates are high-variance.
 - `device_type` × LP2S rate pre/post — mobile-concentrated drops point to a
   UI or performance change
 - `language` × LP2S rate — a single language dropping points to geo-specific
@@ -157,7 +147,7 @@ select page. Work through three tiers in order — don't skip ahead.
   CE country pre-step and top-5 CTE logic; do not use the canonical L2+ query
   for this cut.
 
-**If a dimension concentrates:** run the intersection (e.g., French × mobile), then drill to `page_url` within that segment. The page URL is the target output — it is what the stakeholder needs to act on. A finding is not complete until you can say "these specific URLs are where LP2S dropped, here are the user counts."
+**If a dimension concentrates:** run the intersection (e.g., French × mobile), then drill to `page_url` within that segment to identify the actionable pages. If `page_url` itself concentrates at the first cut, the URL is the direct finding — identify what changed about those pages (template, listed experiences, traffic composition from that entry point). A finding is not complete until you can say "these specific URLs are where LP2S dropped, here are the user counts."
 
 **If country concentrates:**
 - Geo drop → cross-cut with `language` using the local language (e.g., Italian
@@ -168,18 +158,17 @@ select page. Work through three tiers in order — don't skip ahead.
   language-appropriate variants and available inventory for international
   booking windows.
 
-**Tier 2 — If no dimension concentrates (drop is CE-wide and flat across cuts):**
+**If no dimension concentrates (drop is CE-wide and flat across cuts):**
 Run pricing analysis — `final_price_usd` from `product_rankings_features` pre vs post for top experiences. Did prices increase, and does the timing align with the LP2S drop? A CE-wide price uplift will depress LP2S broadly with no dimension cut showing concentration.
 
-**Tier 3 — If pricing is also flat:**
+**If pricing is also flat:**
 The drop is broad, no pricing explanation, no concentrated locus. Session recordings are the next tool — look for a UX pattern that affects all users equally (e.g., slow page load, broken image carousel, changed CTA placement). Note in the transcript that no quantitative locus was found; session recordings are the primary evidence. (Event-level analysis is a future addition for this tier.)
 
 ### S2C — first-pass branches
 
 S2C is about whether users on the select/date-picker page proceed to checkout.
-Work through two tiers in order.
 
-**Tier 1 — Run dimension cuts in parallel (first batch):**
+**Run dimension cuts in parallel:**
 - `language` × S2C rate pre/post — a drop in one language points to a localised
   select-page issue (broken date-picker for that locale, geo-specific pricing
   shock at variant selection)
@@ -207,14 +196,13 @@ Work through two tiers in order.
 
 **If experience concentrates — inventory investigation sequence:**
 
+> **Transcript labels — do not carry into the HTML report.** All labels in this section (`lost_checkouts_delta`, single dominant TGID, multiple significant TGIDs, uniform drop, Path A/B/X) are investigation-internal. Translate to business language in the report: "three most-affected experiences" not "Case B candidate TGIDs"; "post-period data only — pre data unavailable" not "Path A"; "estimated checkout impact" not "lost_checkouts_delta". See report_structure.md → anti-patterns for the full list.
+
 **1. Select which TGIDs to investigate.** From the experience × S2C results, compute `lost_checkouts_delta` for each TGID:
 ```
 lost_checkouts_delta = users_select_post × (s2c_rate_pre − s2c_rate_post)
 ```
-Sort descending. Three situations determine what to do next:
-- **Single dominant TGID** (≥60% of total `lost_checkouts_delta`): Run the inventory queries for that TGID only.
-- **Multiple significant TGIDs** (2–3 TGIDs each contributing ≥10%): Run the inventory queries for each (up to 3).
-- **Uniform drop** (no TGID ≥10%): Skip to the *broad-drop path* at the bottom of this section.
+Sort descending. Investigate the TGIDs that explain the majority of the checkout loss — start with the top contributor. If two or three TGIDs are each meaningfully contributing, run the inventory queries for each. If the drop is spread uniformly with no TGID standing out, skip to the *broad-drop path* at the bottom of this section.
 
 One TGID maps to multiple TIDs (time slots, language variants, ticket types). The queries in `context.md → inventory analysis` always operate at TID level within a TGID.
 
@@ -222,20 +210,25 @@ One TGID maps to multiple TIDs (time slots, language variants, ticket types). Th
 
 **3. For a gradual S2C decline** (drift over multiple weeks): before running inventory queries, pull `days_to_first_available_date` from `product_rankings_features` for the concentrated TGID pre vs post. An increasing trend (users see a progressively thinner near-term calendar) confirms supply scarcity direction quickly. This is a fast pre-check, not a substitute for the inventory queries.
 
-**4. Run the TID snapshot query** (from `context.md → inventory analysis`). Use the results to:
+**4. Run the median query** (Path A or Path B from `context.md → inventory analysis`). Always query through the `experience_id → dim_experience_management WHERE variant_status = 'Active'` bridge — never hardcode a `tour_id` directly, and never use `dim_tours` (it has no `variant_status` column and returns Disabled TIDs, which contaminates both TID selection and ticket counts). The bridge returns all Active TIDs for the TGID automatically; selecting a single `tour_id` without checking the full Active TID list risks missing the actual constrained variant. Use the results to:
 - Flag unlimited-capacity TIDs (`is_fully_unlimited_capacity = TRUE`) — exclude from supply analysis
-- Identify which TID(s) have near-zero tickets to scope the time-series query
+- Identify contributing TIDs: TIDs with near-zero post-period median (Path A) or a significant drop in post-median vs pre-median (Path B). These are the TIDs to include in the time-series charts.
+- If one TID is the locus: scope the daily time-series to that TID. If multiple TIDs are depleted: scope to the TGID (all depleted TIDs aggregated). If mixed (some depleted, some healthy): scope to depleted TIDs only and note excluded healthy TIDs in the chart disclosure banner.
 
-**5. Run the daily time-series query** (from `context.md → inventory analysis`). This is the primary supply evidence — it shows whether inventory was depleted when the S2C drop happened, not just today. Always run regardless of what the snapshot showed. Interpret using the timing guide in `context.md`.
+**5. Run the daily time-series query** (from `context.md → inventory analysis`), scoped to the contributing TIDs identified in step 4. This is the primary supply evidence — it shows whether inventory was depleted when the S2C drop happened, and confirms timing. Always run regardless of what the median table showed. Interpret using the timing guide in `context.md`.
 
-**6. Confirm or rule out supply.** If the time-series shows tickets were healthy throughout the post period → supply is not the mechanism; pivot to pricing. If tickets were low or zero during the post period → supply is the mechanism. Cross-check with the `lead_time_days` distribution from the funnel table — users shifting to longer lead times when that same window is empty confirms supply is causal, not behavioural.
+**6. Confirm, partially flag, or rule out supply.** Read the trend shape and level of each bucket against its baseline (see `context.md → inventory analysis → Interpreting the time-series charts`). Three verdicts:
 
-**Tier 2 — If no dimension concentrates (drop is broad):**
+- **Supply is the mechanism**: a bucket shows sustained depression, an onset event that aligns with the S2C break date, or a gradual decline that tracks the S2C trend. Confirm with the `lead_time_days` distribution — users shifting toward longer lead times when that same window is depleted confirms supply is causal, not behavioural.
+- **Supply partially contributed**: the time-series shows gradual depression across the post period, or episodic dips that are TGID-specific (not synchronized artifacts). Supply was not the primary root cause but suppressed S2C on specific days or weeks. Note this as a secondary finding in the report — do not dismiss it as "supply ruled out." Flag for the supply team with the affected bucket and date range.
+- **Supply ruled out**: levels are flat and stable throughout the post period with no meaningful trend. State this explicitly; pivot to pricing or UX hypotheses.
+
+**If no dimension concentrates (drop is broad):**
 A CE-wide S2C drop with no language/device/experience concentration is unusual. Check two things: (1) was there a change in the checkout flow or variant selection UI? (2) did availability drop uniformly across all experiences?
 
 To check (2) — **broad-drop inventory path**: pick the top 3 TGIDs by `users_select` volume from Q4 (by raw traffic, not by S2C drop) and run the TID snapshot and daily time-series queries for each. Two outcomes:
 - **Same lead-time bucket depleted across all three TGIDs** → CE-wide supply constraint (platform-level cut-off period change, vendor pulling all inventory). Escalate to the supply team with the specific bucket and onset date.
-- **Tickets healthy across all three TGIDs** → supply is not the mechanism. Focus on checkout flow or variant selection UX changes that affected all experiences equally.
+- **Time-series shows tickets healthy throughout the post period across all three TGIDs** → supply is not the mechanism. Focus on checkout flow or variant selection UX changes that affected all experiences equally.
 
 ### C2O — first-pass branches
 
@@ -289,41 +282,19 @@ sync failures).
 
 ## URL concentration — a cross-cutting check
 
-Before reading the step-specific patterns below, check the URL breakdown in
-`summary.json` for the affected metric. URL concentration is a legitimate
-hypothesis regardless of which funnel step is primary — it shapes both the
-mechanism and the DRI.
+URL concentration is a legitimate hypothesis regardless of which funnel step is primary — it shapes both the mechanism and the DRI. Run the canonical L2+ query from `context.md` with `page_url` as the dimension. Apply a majority-contributor filter: only include URLs that account for a meaningful share of CE LP traffic on the fixed segment — long-tail URLs produce high-variance rate estimates and should be treated as directional at best.
 
-A drop concentrated in 2–3 high-traffic URLs points to something specific
-about those pages (a template change, a specific experience listed, an
-audience those URLs attract). A drop spread uniformly across all high-traffic
-URLs points to a CE-wide mechanism (availability, pricing, platform change).
-These two findings call for different root causes and different action owners.
+A drop concentrated in a few high-traffic URLs points to something specific about those pages (a template change, a specific experience listed, the audience those URLs attract). A drop spread uniformly across all high-traffic URLs points to a CE-wide mechanism (availability, pricing, platform change). These two findings call for different root causes and different action owners.
 
-Apply this check for each primary driver type:
+For each primary driver type, the URL breakdown answers a different question:
 
-- **Mix shift:** Which high-traffic URLs gained or lost volume between periods?
-  URL traffic shifts reveal where the routing changed — a specific campaign
-  landing page, a microsite, or a paid channel's destination.
+- **Mix shift:** Did traffic volume shift between URLs — some gaining, others losing? A volume shift without a rate change is a routing story. Identify which channel or campaign drives the gaining URLs.
 
-- **LP2S drop:** Which high-traffic landing URLs show disproportionate LP2S
-  drops? A drop concentrated on specific collection or theme pages points to
-  something about those page templates or the experiences they surface.
+- **LP2S drop:** Did LP2S rate fall on specific URLs while others held? `page_url` is already a first-cut dimension in the LP2S branch — a concentrated URL rate drop points to something that changed on those pages; a uniform drop across all high-traffic URLs points to a CE-wide mechanism.
 
-- **S2C drop:** Which high-traffic URLs (including select/booking pages) show
-  disproportionate S2C drops? A broad drop across all URLs suggests a CE-wide
-  supply or pricing constraint; a concentrated one suggests a specific
-  experience or page-type issue.
+- **S2C drop:** Did S2C rate differ by landing URL? Note: `page_url` here is the session-entry URL (landing page), not the select-page URL. S2C differences by landing URL reflect user composition — users from that entry point have different purchase intent — not a select-page UX issue. A concentrated S2C drop by landing URL reinforces the experience or intent hypothesis from L2c; a uniform drop is more likely a supply or pricing signal.
 
-- **C2O drop:** Which high-traffic booking flows show disproportionate C2O
-  drops? Concentration on specific booking pages can reveal checkout
-  configuration or experience-specific fulfilment issues.
-
-**Volume filter applies.** Only URLs that account for a meaningful share of
-CE traffic on the affected metric qualify as evidence. Long-tail URLs (those
-representing a small fraction of total CE traffic) produce high-variance rate
-estimates — treat their signals as directional at best, not as primary
-evidence. See the majority-contributor principle in `SKILL.md`.
+- **C2O drop:** URL is a weak lens for C2O — the checkout flow is standardised and largely independent of the entry URL. If C2O is the primary driver, focus on checkout configuration and payment issues rather than URL concentration.
 
 ---
 
@@ -504,3 +475,11 @@ Before diagnosing any funnel step: if mix is dominant, the story is about traffi
 | c005 | 2026-04-29 | L0 routing table rewritten: first rows now show cascade exit conditions (mix exit at Level 1/2/3) before the Shapley rows, reflecting that the cascade runs first and Shapley rows apply only after a conversion-path cascade completes. mix_dominance.is_dominant = true row removed — mix determination happens through cascade levels, not as a pre-gate. |
 | c006 | 2026-05-06 | Inventory-related gaps fixed across S2C investigation branches: (1) Removed all `count_days_available_30d` references — replaced with direct `inventory_availability` TID summary table checks. (2) "If experience concentrates" branch restructured: `days_to_first_available_date` from `product_rankings_features` added as fast pre-check for gradual S2C declines; Step 2 TID summary table now serves as the supply gate (full tickets = pivot to pricing, depleted = run Step 3). (3) Tier 2 broad-drop path made concrete: pick top 3 TGIDs by volume, run Step 2 for each; same bucket depleted across all = CE-wide constraint; full across all = not supply. (4) Pattern 4 vendor throttling signal updated: `count_days_available_30d` replaced with `days_to_first_available_date` + 0–2d bucket from `inventory_availability`. (5) Pattern 10 experience availability collapse: updated to point to TID summary table + daily time-series. |
 | c007 | 2026-05-07 | Inventory investigation decision logic moved here from context.md. "If experience concentrates" branch now owns the full investigation sequence: (1) TGID selection via lost_checkouts_delta + three-case classification (single dominant / multiple significant / uniform drop); (2) data availability check; (3) optional gradual-decline pre-check; (4) TID snapshot query usage; (5) daily time-series query usage; (6) supply confirm/rule-out decision. Broad-drop path (uniform drop) moved here from context.md. Removed "Step 2/3" label references throughout — queries now referenced as "TID snapshot query" and "daily time-series query". |
+| c008 | 2026-05-07 | Broad-drop path verdict clarified: "Tickets healthy across all three TGIDs" changed to "Time-series shows tickets healthy throughout the post period across all three TGIDs" — making explicit that the supply rule-out is based on the historical daily time-series, not today's snapshot. |
+| c009 | 2026-05-07 | Added jargon firewall note before the inventory investigation sequence: all investigation-internal labels (lost_checkouts_delta, single dominant TGID, multiple significant TGIDs, uniform drop, Path A/B/X, Case A/B/C) belong in the transcript only and must be translated to business language in the HTML report. Cross-reference to report_structure.md anti-patterns added. |
+| c010 | 2026-05-07 | Reduced over-prescription in first-pass branches: (1) Removed all three "Declare:" wording templates from Mix routing exit sections — the closing paragraph already states what makes a finding complete. (2) Removed "Work through X tiers in order — don't skip ahead" instruction from LP2S and S2C; replaced "Tier 1" labels with "Run dimension cuts in parallel". (3) Removed "Tier 2/3" labels from LP2S fallback steps and "Tier 2" from S2C fallback — replaced with plain "If no dimension concentrates" headers. (4) Replaced the three-case TGID classification (≥60% / ≥10% thresholds) with a principle: investigate TGIDs that explain the majority of the checkout loss, starting with the top contributor. |
+| c011 | 2026-05-07 | Step 6 (supply verdict) expanded from binary to three verdicts: (1) Supply is the mechanism — sustained depression or onset event aligned with S2C break; (2) Supply partially contributed — gradual depression or TGID-specific episodic dips; note as secondary finding, do not silence; (3) Supply ruled out — flat and stable throughout. Aligns with the trend-based interpretation guide in context.md c021. |
+| c012 | 2026-05-07 | Inventory investigation steps 4 and 5 updated: (1) Step 4 renamed from "TID snapshot query" to "median query" (Path A post-period median / Path B pre/post median). Added explicit bridge enforcement: always query through `experience_id → dim_tours` — never hardcode a `tour_id`. Added contributing TID identification: near-zero post-period median (Path A) or significant post vs pre median drop (Path B). Added TID-to-chart scoping rule: one locus → single TID trace; multiple depleted → TGID aggregate; mixed → depleted only with healthy TIDs noted in chart banner. (2) Step 5 updated to reference scoping derived from step 4 rather than the snapshot. |
+| c013 | 2026-05-07 | Step 4 bridge corrected and booking-horizon pre-check added: (1) Bridge changed from `experience_id → dim_tours` to `experience_id → dim_experience_management WHERE variant_status = 'Active'`. Reason: `dim_tours` has no `variant_status` column — returns Disabled TIDs, causing wrong TID selection (CE 189 post-mortem: TID 67659 Disabled was queried; Active TIDs 17000/17521 were missed). (2) Booking-horizon pre-check added as a mandatory step before running the median query: if `min_lead_time > 30` in the post period, standard bucket ceiling is mismatched to the product's horizon and all buckets return zeros that are not a supply signal. Pointer to `context.md → Booking-horizon pre-check` added. |
+| c014 | 2026-05-08 | Removed booking-horizon pre-check reference from Step 4 (added in c013). The motivating example (Vatican Museums as a 60–90 day horizon product) was factually wrong; the pre-check added an unnecessary mandatory query with no analytical benefit, since zeros in both periods are already correctly handled by the "flat and stable → supply ruled out" interpretation. Bridge fix (dim_experience_management WHERE variant_status = 'Active') retained. |
+| c015 | 2026-05-13 | Added URL-level analysis to LP2S investigation and fixed the broken URL concentration cross-cutting check. (1) LP2S first-pass branches: added `page_url` × LP2S rate and volume as an explicit parallel first-cut dimension — checks both volume shift between URLs (routing story) and rate change on specific URLs (page-specific story) independently; majority-contributor filter note added. Updated "if a dimension concentrates" follow-up to reflect that when URL itself concentrates at the first cut, it is the direct finding, not a secondary drill-down. (2) URL concentration cross-cutting check: removed broken `summary.json` URL breakdown reference (that field does not exist). Replaced with: run the canonical L2+ query with `page_url` as dimension. Rewrote sub-bullets for Mix/LP2S/S2C/C2O to be operationally executable and conceptually accurate — specifically, clarified that `page_url` in S2C context is the session-entry URL (landing page), not the select-page URL, so S2C differences by URL reflect user composition (intent) rather than select-page UX. C2O sub-bullet updated to flag URL as a weak lens for checkout-stage drops. |

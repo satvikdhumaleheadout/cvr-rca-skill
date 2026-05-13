@@ -95,7 +95,7 @@ Pre: 2026-03-15–2026-04-13 | Post: 2026-04-14–2026-05-13
 
 ## Tree map
 L0: S2C (83% Δ) · sharp break Apr 14 · structural −4.1pp
-├─ L1a: Experience-level S2C + availability  →  CONFIRMED (TGID 8821: −15pp, avail 38→11d)
+├─ L1a: Experience-level S2C + inventory     →  CONFIRMED (TGID 8821: −15pp; daily time-series confirms 8–30d depleted Apr 14)
 │   └─ L2a: Lead time distribution for 8821  →  CONFIRMED (8+ day bookings down 75–83%)
 │       └─ LEAF: Supply partner closed 8821 inventory beyond ~7 days on Apr 14
 └─ L1b: MB vs HO S2C split                  →  CONFIRMED (HO carries drop; narrows locus)
@@ -124,14 +124,27 @@ Result:
 → CONFIRMED — TGID 8821 is the locus. Run inventory_availability TID summary table.
   Closes: broad platform/UX hypothesis (would show uniform drop, not one TGID).
 
-**Inventory TID summary table for TGID 8821**
-Query: TID summary from latest extracted_date snapshot (Path B — pre within 30d window).
-Result (tickets by lead-time bucket, post snapshot vs pre snapshot):
-  TID 30112 (Dinner Cruise 7pm): tickets_0_2d 22→18, tickets_3_7d 14→11,
-    tickets_8_13d 180→0, tickets_14_30d 340→0.
-  TID 30113 (Dinner Cruise 9pm): tickets_8_13d 210→0, tickets_14_30d 290→0.
-→ CONFIRMED — 8–13d and 14–30d buckets went to zero for all TIDs. Near-term (0–7d)
-  unaffected. Opens L2a: when did the 8+ day window collapse?
+**Inventory TID snapshot for TGID 8821 (current-state orientation)**
+Query: TID snapshot — MAX(extracted_date) = today. Path B — pre within 30d window.
+Result (today's ticket counts by lead-time bucket):
+  TID 30112 (Dinner Cruise 7pm): tickets_0_2d 22, tickets_3_7d 14,
+    tickets_8_13d 0, tickets_14_30d 0. Limited capacity.
+  TID 30113 (Dinner Cruise 9pm): tickets_0_2d 18, tickets_3_7d 9,
+    tickets_8_13d 0, tickets_14_30d 0. Limited capacity.
+→ SCOPING — 8–13d and 14–30d buckets zero today for both TIDs. Near-term (0–7d)
+  healthy. Scopes the daily time-series to the 8–30d buckets. Supply verdict below.
+
+**Inventory daily time-series for TGID 8821 (primary supply evidence)**
+Query: tickets by extracted_date × bucket, TIDs 30112 + 30113, Path B.
+  Pre (Mar 15 – Apr 13) and post (Apr 14 – May 13), all four buckets.
+Result:
+  tickets_8_13d: Pre stable at 380–410 tickets/day. Post Apr 14+: 0 throughout.
+  tickets_14_30d: Pre stable at 600–640 tickets/day. Post Apr 14+: 0 throughout.
+  tickets_0_2d and tickets_3_7d: Flat throughout pre and post (~22–25 and 14–18).
+→ CONFIRMED (supply) — Both 8–30d buckets healthy throughout pre, collapsed to zero
+  on Apr 14 and stayed zero through the full post period. Onset matches the S2C break
+  exactly. Supply partner closed TGID 8821 inventory beyond ~7 days on Apr 14.
+  Opens L2a: check lead-time distribution — do checkout bookings mirror the supply window?
 
 **MB vs HO S2C split**
 Query: S2C rate by is_microbrand_page, pre vs post.
@@ -139,7 +152,7 @@ Result: HO S2C 28% → 14%. MB S2C 18% → 16%.
 → CONFIRMED — HO carries the drop. Narrows locus: HO users on 8821 select page.
   Does not change TGID finding — reinforces it.
 
-## L2 — Availability mechanism for TGID 8821
+## L2 — Behavioral corroboration for TGID 8821
 ### Lead time distribution
 
 **Lead time buckets for TGID 8821 checkouts**
@@ -149,17 +162,20 @@ Result:
   0–7 days:  210 → 198 (−6%). Near-term bookings stable.
   8–14 days: 380 →  94 (−75%).
   15+ days:  510 →  88 (−83%).
-→ CONFIRMED — LEAF reached. Far-out bookings collapsed Apr 14+. Supply partner
-  closed inventory for all dates beyond ~7 days.
+→ CONFIRMED — LEAF reached. Checkout behavior mirrors the supply window: 8+ day
+  bookings down 75–83% from Apr 14, matching the bucket collapse confirmed by the
+  daily time-series.
 
 ## Root cause confirmed
-On or around Apr 14, the supply partner for TGID 8821 (Seine Dinner Cruise)
-closed inventory for all dates beyond ~7 days. HO users with planned trip dates
-reach the select page and find no available dates, driving S2C from 24% to 9%
-on 1,840 users — a loss of ~276 checkouts and 83% of the ΔCVR. Availability
-TID summary table (tickets_8_13d and tickets_14_30d → 0 for all TIDs of 8821)
-and lead time collapse (8+ day bookings down 75–83%) both confirm the mechanism. Session recordings: users
-consistently see an empty date picker beyond the current week on the 8821 page.
+On Apr 14, the supply partner for TGID 8821 (Seine Dinner Cruise) closed inventory
+for all dates beyond ~7 days. Daily time-series confirms: tickets_8_13d and
+tickets_14_30d were stable at 380–640/day throughout pre, collapsed to zero on Apr 14,
+and stayed zero through the full post period — while near-term (0–7d) buckets held
+flat. HO users with planned trip dates reach the select page and find no available
+dates, driving S2C from 24% to 9% on 1,840 users — a loss of ~276 checkouts and 83%
+of the ΔCVR. Lead time distribution confirms the behavior side: 8+ day bookings down
+75–83%. Session recordings: users consistently see an empty date picker beyond the
+current week on the 8821 page.
 ```
 
 ---
@@ -176,9 +192,11 @@ L2 leaf was confirmed. Users consistently encountered an empty date picker beyon
 
 CVR verdict (availability closure for TGID 8821), mix ruled out in one line,
 Shapley bar, S2C daily trend (break on Apr 14), experience-level S2C table
-(TGID 8821 highlighted), lead time distribution chart (pre vs post), session
-recordings table. Action cards: Supply/Ops (reopen 8821 inventory), Growth/BDM
-(alert affected users).
+(TGID 8821 highlighted), TID snapshot table (current-state, 8–30d near-zero as
+scoping signal), inventory daily time-series charts (4 line charts — pre vs post,
+sharp Apr 14 break in 8–30d buckets is the primary supply verdict), lead time
+distribution chart (pre vs post), session recordings table. Action cards:
+Supply/Ops (reopen 8821 inventory), Growth/BDM (alert affected users).
 
 Sections not present: LP2S deep-dive, C2O section (each <10% of ΔCVR).
 
@@ -192,3 +210,4 @@ Sections not present: LP2S deep-dive, C2O section (each <10% of ΔCVR).
 | c002 | 2026-04-27 | Rewritten to show investigation tree traversal with parallel query batches |
 | c003 | 2026-04-27 | Added tree map block to both transcripts — shows full branch structure with CONFIRMED/RULED OUT/LEAF outcomes before detail sections |
 | c004 | 2026-05-06 | Updated Paris river cruise example to match new inventory architecture: (1) Experience-level S2C step no longer pulls `count_days_available_30d` from `product_rankings_features`; TGID 8821 is confirmed purely from the S2C rate drop. (2) Added TID summary table result for TGID 8821 showing per-TID ticket depletion by bucket (tickets_8_13d and tickets_14_30d → 0 for all TIDs). (3) Root cause summary updated: replaced `count_days_available_30d: 38 → 11` with TID summary table finding. |
+| c005 | 2026-05-07 | Inventory investigation sequence corrected to snapshot-vs-time-series architecture: (1) Tree map L1a label updated — "avail 38→11d" replaced with "daily time-series confirms 8–30d depleted Apr 14". (2) TID snapshot block rewritten: removed "post snapshot vs pre snapshot" arrow notation (e.g., 180→0); now shows today's single-state ticket counts; verdict changed from CONFIRMED to SCOPING SIGNAL. (3) Daily time-series block added as separate step — shows pre-period stability, Apr 14 collapse to zero in both 8–30d buckets, and flat near-term throughout; this block is now the supply verdict source. (4) L2 header changed from "Availability mechanism" to "Behavioral corroboration"; outcome updated to state that checkout lead-time behavior mirrors the supply window. (5) Root cause paragraph updated: supply confirmation attributed to daily time-series (pre healthy → collapsed Apr 14) not TID snapshot. (6) "What the report covers" updated to include both TID snapshot (scoping) and inventory daily time-series charts (primary supply verdict). |

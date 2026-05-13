@@ -592,6 +592,8 @@ SELECT and GROUP BY to test any cut (language, device_type, experience_id,
 page_url, etc.). Focus on whichever rate Shapley identified as the primary
 driver — the others are context.
 
+When `page_url` is the dimension, sort output by `users_lp DESC` (not alphabetically) to surface majority-contributor URLs first. Long-tail URLs that represent a small fraction of total CE LP traffic produce high-variance rate estimates — focus on top contributors and treat low-volume URLs as directional at best.
+
 ```sql
 SELECT
     <dimension>,                          -- swap: language / device_type / experience_id / page_url / etc.
@@ -780,7 +782,7 @@ LEFT JOIN `headout-analytics.analytics_reporting.dim_experiences` AS de
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `tour_id` | STRING | Only join key. Bridge to `experience_id` via `dim_tours` (see lead-time bucket query below). |
+| `tour_id` | STRING | Only join key. Bridge to `experience_id` via `dim_experience_management WHERE variant_status = 'Active'` (see queries below). Never use `dim_tours` — it has no `variant_status` column and returns Disabled TIDs. |
 | `experience_date` | DATE | The date of the experience slot. |
 | `extracted_date` | DATE | The date this inventory was observed. Lead time = `DATE_DIFF(experience_date, extracted_date, DAY)`. |
 | `total_remaining` | INT64 | Total capacity remaining across all time slots for this date. 0 means fully sold out. |
@@ -788,7 +790,7 @@ LEFT JOIN `headout-analytics.analytics_reporting.dim_experiences` AS de
 | `count_limited_time_slots` | INT64 | Slots with a finite capacity cap. |
 | `count_unlimited_time_slots` | INT64 | Slots with uncapped capacity. |
 
-**Join path to get from `combined_entity_id` → inventory:** `dim_experiences` has no `tour_id` column; `inventory_availability` has no `experience_id` column. The bridge is `dim_tours`, which carries both `tour_id` and `experience_id`. Always use the two-hop pattern: `dim_experiences (experience_id) → dim_tours (experience_id → tour_id) → inventory_availability (tour_id)`.
+**Join path to get from `combined_entity_id` → inventory:** `dim_experiences` has no `tour_id` column; `inventory_availability` has no `experience_id` column. The correct bridge is `dim_experience_management`, which carries `experience_id`, `tour_id`, `tour_name`, and `variant_status` in a single table. Always filter `variant_status = 'Active'` — `dim_tours` has no `variant_status` column and returns all TIDs including Disabled variants, which pollutes both TID selection and ticket-count queries. Always use: `dim_experience_management WHERE variant_status = 'Active'` → `inventory_availability (tour_id)`. Never use `dim_experiences → dim_tours` for inventory bridging.
 
 **Data availability — check before querying:**
 
@@ -802,74 +804,180 @@ The table retains a 30-day rolling window. What's available depends on how old t
 
 **Note on `total_remaining` for unlimited slots:** `inventory_availability` represents unlimited-capacity time slots as `total_remaining = 1` per slot (not actual capacity). Zero reliably signals sold-out; a non-zero value from an unlimited-capacity TID does not indicate scarce supply. An S2C drop from unlimited-capacity TIDs almost never traces to a capacity constraint.
 
-**TID snapshot query**
+---
 
-Returns one row per TID with ticket counts (`sum(total_remaining)`) bucketed into four lead-time windows, from the latest available `extracted_date`. This is today's inventory state — not the post period. Use it to identify which TIDs exist, flag unlimited-capacity TIDs, and scope the daily time-series query. The supply verdict comes from the time-series, not this snapshot.
+**Path A — post-period median query**
 
-`is_fully_unlimited_capacity`: if TRUE, all time slots for that TID are uncapped — `total_remaining = 1` is a system constant, not real seat count. Do not flag these TIDs as supply-constrained. `total_remaining = 0` is still valid (the slot was removed entirely).
+Use when `pre_start < CURRENT_DATE − 30` (Path A). Returns one row per TID with median ticket counts across all `extracted_dates` within the post period. This answers "was this TID typically constrained during the post period?" — which is the relevant question for RCA. Use it to identify contributing TIDs, flag unlimited-capacity TIDs, and scope the daily time-series query.
+
+`is_fully_unlimited_capacity`: if TRUE for a TID across the post period, exclude it from the supply finding — note it in subtext.
 
 ```sql
--- Bridge: dim_experiences has no tour_id; inventory_availability has no experience_id.
--- dim_tours carries both — use it as the two-hop bridge.
+-- Bridge: always use dim_experience_management with variant_status = 'Active'.
+-- dim_tours has no variant_status column and returns Disabled TIDs — do not use it.
 WITH tgid_tours AS (
 
     SELECT DISTINCT
-        dt.tour_id,
-        dt.tour_name
+        dem.tour_id,
+        dem.tour_name
 
-    FROM `headout-analytics.analytics_reporting.dim_experiences` AS de
-    INNER JOIN `headout-analytics.analytics_reporting.dim_tours` AS dt
-        USING (experience_id)
+    FROM `headout-analytics.analytics_reporting.dim_experience_management` AS dem
 
-    WHERE de.experience_id = '<tgid>'
-
-),
-
-latest_snapshot_date AS (
-
-    SELECT MAX(extracted_date) AS max_extracted_date
-
-    FROM `headout-analytics.analytics_reporting.inventory_availability`
-
-    WHERE tour_id IN (SELECT tour_id FROM tgid_tours)
+    WHERE dem.experience_id = '<tgid>'
+      AND dem.variant_status = 'Active'
 
 ),
 
-snapshot AS (
+daily_post AS (
 
     SELECT
         inv.tour_id,
-        tgt.tour_name,
-        DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) AS lead_time_days,
-        inv.total_remaining,
-        inv.count_unlimited_time_slots,
-        inv.count_limited_time_slots
+        inv.extracted_date,
+        SUM(CASE WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 0  AND  2  THEN inv.total_remaining ELSE 0 END) AS tickets_0_2d,
+        SUM(CASE WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 3  AND  7  THEN inv.total_remaining ELSE 0 END) AS tickets_3_7d,
+        SUM(CASE WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 8  AND 13  THEN inv.total_remaining ELSE 0 END) AS tickets_8_13d,
+        SUM(CASE WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 14 AND 30  THEN inv.total_remaining ELSE 0 END) AS tickets_14_30d,
+        MAX(CASE WHEN inv.count_limited_time_slots = 0 AND inv.count_unlimited_time_slots > 0
+                 THEN TRUE ELSE FALSE END)                                                        AS is_fully_unlimited_capacity
 
-    FROM tgid_tours AS tgt
+    FROM tgid_tours
     INNER JOIN `headout-analytics.analytics_reporting.inventory_availability` AS inv
         USING (tour_id)
-    CROSS JOIN latest_snapshot_date
 
-    WHERE inv.extracted_date = latest_snapshot_date.max_extracted_date
+    WHERE inv.extracted_date BETWEEN '<post_start>' AND '<post_end>'
       AND inv.experience_date >= inv.extracted_date
+
+    GROUP BY 1, 2
 
 )
 
 SELECT
-    tour_id,
-    tour_name,
-    SUM(CASE WHEN lead_time_days BETWEEN 0  AND  2  THEN total_remaining ELSE 0 END) AS tickets_0_2d,
-    SUM(CASE WHEN lead_time_days BETWEEN 3  AND  7  THEN total_remaining ELSE 0 END) AS tickets_3_7d,
-    SUM(CASE WHEN lead_time_days BETWEEN 8  AND 13  THEN total_remaining ELSE 0 END) AS tickets_8_13d,
-    SUM(CASE WHEN lead_time_days BETWEEN 14 AND 30  THEN total_remaining ELSE 0 END) AS tickets_14_30d,
-    MAX(CASE WHEN count_limited_time_slots = 0 AND count_unlimited_time_slots > 0
-             THEN TRUE ELSE FALSE END)                                                AS is_fully_unlimited_capacity
+    tt.tour_id,
+    tt.tour_name,
+    CAST(APPROX_QUANTILES(dp.tickets_0_2d,  2)[OFFSET(1)] AS INT64) AS post_median_0_2d,
+    CAST(APPROX_QUANTILES(dp.tickets_3_7d,  2)[OFFSET(1)] AS INT64) AS post_median_3_7d,
+    CAST(APPROX_QUANTILES(dp.tickets_8_13d, 2)[OFFSET(1)] AS INT64) AS post_median_8_13d,
+    CAST(APPROX_QUANTILES(dp.tickets_14_30d,2)[OFFSET(1)] AS INT64) AS post_median_14_30d,
+    MAX(dp.is_fully_unlimited_capacity)                               AS is_fully_unlimited_capacity
 
-FROM snapshot
+FROM tgid_tours AS tt
+LEFT JOIN daily_post AS dp USING (tour_id)
 
 GROUP BY 1, 2
 
 ORDER BY 1
+```
+
+**Path B — pre/post median query**
+
+Use only when `pre_start >= CURRENT_DATE − 30` (Path B). Returns per-TID median ticket counts for both the pre and post periods — computed across all `extracted_dates` within each period, not a single snapshot date. The result populates the 2×2 bucket grid table in the report (see `report_structure.md → Path B — TID pre/post median comparison`). The daily time-series query is still always run — this table is a compact summary, not a substitute for the time-series.
+
+For multi-TGID investigations, run this query once per TGID by substituting the TGID's `experience_id` in the `tgid_tours` CTE.
+
+```sql
+-- Path B only: pre_start >= CURRENT_DATE − 30.
+-- Median computed across all extracted_dates within each period — not a single snapshot date.
+-- Bridge: always use dim_experience_management with variant_status = 'Active'.
+WITH tgid_tours AS (
+
+    SELECT DISTINCT
+        dem.tour_id,
+        dem.tour_name
+
+    FROM `headout-analytics.analytics_reporting.dim_experience_management` AS dem
+
+    WHERE dem.experience_id = '<tgid>'
+      AND dem.variant_status = 'Active'
+
+),
+
+daily_pre AS (
+
+    SELECT
+        inv.tour_id,
+        inv.extracted_date,
+        SUM(CASE WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 0  AND  2  THEN inv.total_remaining ELSE 0 END) AS tickets_0_2d,
+        SUM(CASE WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 3  AND  7  THEN inv.total_remaining ELSE 0 END) AS tickets_3_7d,
+        SUM(CASE WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 8  AND 13  THEN inv.total_remaining ELSE 0 END) AS tickets_8_13d,
+        SUM(CASE WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 14 AND 30  THEN inv.total_remaining ELSE 0 END) AS tickets_14_30d
+
+    FROM tgid_tours
+    INNER JOIN `headout-analytics.analytics_reporting.inventory_availability` AS inv
+        USING (tour_id)
+
+    WHERE inv.extracted_date BETWEEN '<pre_start>' AND '<pre_end>'
+      AND inv.experience_date >= inv.extracted_date
+
+    GROUP BY 1, 2
+
+),
+
+daily_post AS (
+
+    SELECT
+        inv.tour_id,
+        inv.extracted_date,
+        SUM(CASE WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 0  AND  2  THEN inv.total_remaining ELSE 0 END) AS tickets_0_2d,
+        SUM(CASE WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 3  AND  7  THEN inv.total_remaining ELSE 0 END) AS tickets_3_7d,
+        SUM(CASE WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 8  AND 13  THEN inv.total_remaining ELSE 0 END) AS tickets_8_13d,
+        SUM(CASE WHEN DATE_DIFF(inv.experience_date, inv.extracted_date, DAY) BETWEEN 14 AND 30  THEN inv.total_remaining ELSE 0 END) AS tickets_14_30d,
+        MAX(CASE WHEN inv.count_limited_time_slots = 0 AND inv.count_unlimited_time_slots > 0
+                 THEN TRUE ELSE FALSE END)                                                        AS is_fully_unlimited_capacity
+
+    FROM tgid_tours
+    INNER JOIN `headout-analytics.analytics_reporting.inventory_availability` AS inv
+        USING (tour_id)
+
+    WHERE inv.extracted_date BETWEEN '<post_start>' AND '<post_end>'
+      AND inv.experience_date >= inv.extracted_date
+
+    GROUP BY 1, 2
+
+),
+
+pre_medians AS (
+
+    SELECT
+        tour_id,
+        CAST(APPROX_QUANTILES(tickets_0_2d,  2)[OFFSET(1)] AS INT64) AS pre_median_0_2d,
+        CAST(APPROX_QUANTILES(tickets_3_7d,  2)[OFFSET(1)] AS INT64) AS pre_median_3_7d,
+        CAST(APPROX_QUANTILES(tickets_8_13d, 2)[OFFSET(1)] AS INT64) AS pre_median_8_13d,
+        CAST(APPROX_QUANTILES(tickets_14_30d,2)[OFFSET(1)] AS INT64) AS pre_median_14_30d
+
+    FROM daily_pre
+    GROUP BY 1
+
+),
+
+post_medians AS (
+
+    SELECT
+        tour_id,
+        CAST(APPROX_QUANTILES(tickets_0_2d,  2)[OFFSET(1)] AS INT64) AS post_median_0_2d,
+        CAST(APPROX_QUANTILES(tickets_3_7d,  2)[OFFSET(1)] AS INT64) AS post_median_3_7d,
+        CAST(APPROX_QUANTILES(tickets_8_13d, 2)[OFFSET(1)] AS INT64) AS post_median_8_13d,
+        CAST(APPROX_QUANTILES(tickets_14_30d,2)[OFFSET(1)] AS INT64) AS post_median_14_30d,
+        MAX(is_fully_unlimited_capacity)                               AS is_fully_unlimited_capacity
+
+    FROM daily_post
+    GROUP BY 1
+
+)
+
+SELECT
+    tt.tour_id,
+    tt.tour_name,
+    pre.pre_median_0_2d,   post.post_median_0_2d,
+    pre.pre_median_3_7d,   post.post_median_3_7d,
+    pre.pre_median_8_13d,  post.post_median_8_13d,
+    pre.pre_median_14_30d, post.post_median_14_30d,
+    post.is_fully_unlimited_capacity
+
+FROM tgid_tours AS tt
+LEFT JOIN pre_medians  AS pre  USING (tour_id)
+LEFT JOIN post_medians AS post USING (tour_id)
+
+ORDER BY tt.tour_id
 ```
 
 **Daily time-series query**
@@ -887,15 +995,14 @@ Produces one row per `extracted_date` with total tickets in each lead-time bucke
 ```sql
 WITH tgid_tours AS (
 
-    SELECT DISTINCT dt.tour_id
+    SELECT DISTINCT dem.tour_id
 
-    FROM `headout-analytics.analytics_reporting.dim_experiences` AS de
-    INNER JOIN `headout-analytics.analytics_reporting.dim_tours` AS dt
-        USING (experience_id)
+    FROM `headout-analytics.analytics_reporting.dim_experience_management` AS dem
 
-    WHERE <scope_filter>
-    -- Set to: de.experience_id = '<tgid>'  (all TIDs)
-    --     OR: dt.tour_id = '<tid_id>'       (single TID locus)
+    WHERE dem.variant_status = 'Active'
+      AND <scope_filter>
+    -- Set to: dem.experience_id = '<tgid>'  (all TIDs)
+    --     OR: dem.tour_id = '<tid_id>'       (single TID locus)
 
 )
 
@@ -924,17 +1031,25 @@ ORDER BY 1
 
 **Interpreting the time-series charts:**
 
-Before drawing any supply conclusion, compare the *timing* of any ticket drop to the timing of the S2C drop.
+**Check `is_fully_unlimited_capacity` first:** Before reading any trend, verify in the TID snapshot that the TID is not fully unlimited-capacity. `total_remaining = 1` for such TIDs is a system constant, not real scarcity — their time-series carries no supply signal.
 
-- **Tickets low or zero throughout the post period** → supply constraint was active when S2C dropped. This is the key RCA pattern.
-- **Tickets healthy during post, then dropped near today's date** → the historical S2C drop was not caused by this supply constraint. The current depletion is a separate event.
-- **Tickets declined mid-way through the post period** → match the onset date to when S2C began falling. If they coincide → supply is the mechanism; if they diverge → investigate the non-overlapping interval separately.
+The primary question is not "did it hit zero?" but "what is the **trend direction and level** of each bucket, and does that match the timing and shape of the S2C drop?"
 
-**Check `is_fully_unlimited_capacity` first:** Before flagging any TID as supply-constrained, verify it is not fully unlimited-capacity in the TID snapshot. `total_remaining = 1` for such TIDs is a system constant, not real scarcity.
+**Establish the baseline before reading the trend:**
+- **Path B** (pre period in window): the pre-period daily values are the explicit baseline. Compare post-period levels and slope to the pre average for each bucket.
+- **Path A** (post period only): no pre-period baseline. Use two internal references: (1) relative level across buckets — a near-term bucket running at a small fraction of a longer-horizon bucket suggests near-term absorption; (2) the trend within the post period — a bucket that declines steadily across the post window points to a worsening supply situation even without a pre comparison.
 
-Additional patterns (apply after the timing check):
-- **One bucket drops, others hold** → window-specific constraint (allotment cut, bulk booking, cut-off change). Flag for the supply team; do not assert the mechanism without corroborating evidence.
-- **All buckets drop** → product-wide or platform-wide supply reduction (product paused, vendor pulled all inventory).
+**Trend shapes to look for (read each bucket independently):**
+
+- **Sustained depression**: levels low or at zero throughout, clearly below the pre baseline (Path B) or clearly depleted relative to longer-horizon buckets (Path A). The primary supply RCA pattern.
+- **Onset event**: flat through the pre period and early post, then drops sharply on a specific date. Match that date to the S2C break date — coincidence confirms supply as the mechanism.
+- **Gradual decline**: starts near the baseline but trends steadily lower across the post period without collapsing. Matches a gradual S2C decline; supply is contributing, but may be one factor among several.
+- **Episodic dips**: isolated low or zero values on specific dates with recovery in between. Before reading these as supply events, check synchronisation: **if all investigated TGIDs show zeros on the same calendar dates**, it is almost certainly an extraction artifact (the pipeline missed a snapshot day). If the dips are TGID-specific — different dates for different TGIDs, or concentrated in one experience — they are genuine episodic sell-outs on those dates and should be noted even if they do not explain the full post-period trend.
+- **Flat and stable**: consistent levels throughout, no meaningful trend. Supply ruled out for this bucket.
+
+**Scope patterns (apply across buckets after reading the trend for each):**
+- **One bucket affected, others flat** → window-specific constraint (allotment cut, cut-off period change, bulk booking). State the bucket; do not assert the mechanism without supply-team corroboration.
+- **All buckets declining or low** → product-wide or platform-wide supply reduction.
 
 ---
 
@@ -1234,3 +1349,9 @@ thinking and makes the inference scannable.
 | c016 | 2026-05-06 | Inventory analysis redesign — Phase 2 (gap fixes): (1) Step 1 expanded to 3-case TGID locus identification using `lost_checkouts_delta` as ranking metric: Case A (≥60% in one TGID → single locus), Case B (2–3 TGIDs each ≥10% → run Step 2 for each), Case C (uniform drop → broad-drop path). (2) Step 2 query extended with `is_fully_unlimited_capacity` flag (derived from `count_unlimited_time_slots` and `count_limited_time_slots`) — prevents misreading unlimited-capacity TIDs as supply-constrained. (3) Supply gate added: if Step 2 shows full tickets for all limited-capacity TIDs, supply is ruled out and Step 3 is skipped; pivot to pricing instead. (4) Broad-drop inventory path section added for Case C: run Step 2 for top 3 TGIDs by volume; same bucket depleted across all = CE-wide constraint; full tickets = not supply. (5) Step 3 SQL parameterized with `<scope_filter>`, `<series_start>`, `<series_end>` — replaces ambiguous commented-out WHERE alternatives. |
 | c018 | 2026-05-06 | Fixed critical inventory RCA design flaw: Step 2 uses MAX(extracted_date) = today's snapshot, so it cannot confirm or rule out historical supply causes. (1) Added Path X: post_end < CURRENT_DATE - 30 → no inventory data for the RCA period at all; skip Steps 2–3 and state limitation explicitly. (2) Path A qualification tightened: now explicitly requires post_end >= CURRENT_DATE - 30 to distinguish from Path X. (3) Step 2 reframed as "current-state orientation only" — scope Step 3 and flag unlimited-capacity TIDs; do NOT gate the supply verdict. (4) Removed supply gate paragraph (was wrong: gated Step 3 on today's snapshot even when S2C drop was weeks ago). (5) Step 3 reframed as "primary RCA evidence — always run" regardless of Step 2 results. (6) Step 3 interpretation expanded with three line chart timing scenarios: tickets low throughout post (supply active during drop), tickets healthy during post then dropped recently (supply is NOT the historical cause), tickets declined mid-post (onset matches S2C drop → supply is mechanism). |
 | c019 | 2026-05-07 | Structural separation: investigation decision logic moved out of context.md into hypothesis.md. context.md now owns only schema, data-availability facts, SQL queries (renamed from "Step 2/3" to "TID snapshot query" / "Daily time-series query"), and chart interpretation guide. Removed: Step 1 locus identification (Case A/B/C + lost_checkouts_delta), Path A/B/X as decision framing, TID scoping decision block, broad-drop inventory path (Case C). Added pointer: "For TGID selection and the inventory investigation decision tree, see hypothesis.md → S2C investigation → inventory branch." |
+| c020 | 2026-05-07 | Added "Path B — TID pre/post comparison query" between the TID snapshot query and the daily time-series query. Uses two snapshot CTEs anchored at `pre_end` and `post_end` respectively (both using `MAX(extracted_date) <= date`). Returns one row per TID with `pre_tickets_*` and `post_tickets_*` side-by-side for all four lead-time buckets plus `is_fully_unlimited_capacity` from the post snapshot. Scope: Path B only (`pre_start >= CURRENT_DATE − 30`). Multi-TGID note added (run once per TGID). Result populates the 2×2 bucket grid table defined in report_structure.md. |
+| c021 | 2026-05-07 | Rewrote time-series interpretation guide: replaced binary event detection (zero/non-zero, depleted/healthy) with trend-based analysis. Key changes: (1) Primary question reframed — "what is the trend direction and level relative to a baseline?" not "did it hit zero?". (2) Baseline definition added: Path B = pre-period averages; Path A = cross-bucket ratio + intra-post trend. (3) Four trend shapes defined: sustained depression, onset event, gradual decline (partial contribution), episodic dips. (4) Artifact detection rule added: synchronized zeros across all TGIDs on the same calendar dates = extraction artifact; TGID-specific dips on different dates = genuine episodic constraint worth noting. (5) Three-verdict supply framework: primary mechanism / partial contribution / ruled out — replaces binary mechanism/ruled-out framing. |
+| c022 | 2026-05-07 | Replaced both inventory summary table queries with period-median queries: (1) Path A "TID snapshot query" (single extracted_date = today) replaced with "Path A post-period median query" — uses `daily_post` + `APPROX_QUANTILES` CTEs to return median ticket counts across all extracted_dates in [post_start, post_end]. Answers "was this TID typically constrained during the period under investigation?" not "what does it look like today?". (2) Path B "pre/post comparison query" (two single-date snapshots at pre_end and post_end) replaced with "Path B pre/post median query" — uses `daily_pre` + `daily_post` + `pre_medians` + `post_medians` CTEs. Both medians computed via `APPROX_QUANTILES(col, 2)[OFFSET(1)]` cast to INT64. Single-date snapshots removed entirely from both queries. |
+| c023 | 2026-05-07 | Fixed two inventory bugs identified from CE 189 post-mortem: (1) Wrong bridge table — all three inventory queries (Path A median, Path B median, daily time-series) previously used `dim_experiences → dim_tours` as the bridge. `dim_tours` has no `variant_status` column and returns Disabled TIDs. Changed bridge to `dim_experience_management WHERE variant_status = 'Active'` in all three `tgid_tours` CTEs. Updated join-path description accordingly. (2) Hard 30-day bucket ceiling — for products with long booking horizons (Vatican Museums, popular POIs), all experience_dates fall 60–90+ days out during the post period. Standard buckets (max 30d) return zeros that are indistinguishable from genuine sell-out. Added "Booking-horizon pre-check" section before Path A: run a lead-time range query (min/max/median lead time); if `min_lead_time > 30`, extend bucket boundaries to match the actual horizon (0–14d, 15–30d, 31–60d, 61–90d, 91+d); note the adjustment in transcript and report. |
+| c024 | 2026-05-08 | Removed "Booking-horizon pre-check" section added in c023. Post-mortem review confirmed the motivating example (Vatican Museums as a 60–90 day horizon product) was factually wrong — CE 189 is a standard short/medium horizon product and the zeros in both periods were genuine stable zeros, not a window mismatch. The pre-check also adds no analytical value: if a product genuinely had all experience_dates beyond 30 days, both pre and post would show zeros, and the existing "flat and stable → supply ruled out" interpretation already gives the correct conclusion without a separate pre-check query. |
+| c025 | 2026-05-13 | Added usage note to the L2+ canonical query pattern for `page_url` as dimension: sort output by `users_lp DESC` (not alphabetically) to surface majority-contributor URLs first; long-tail URLs produce high-variance rate estimates and should be treated as directional only. |
