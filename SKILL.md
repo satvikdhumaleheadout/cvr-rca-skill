@@ -186,12 +186,19 @@ Every number here must trace to a named query result in the detail sections abov
 
 **How to use the tree map:** Start it after L0 with all L1 branches marked
 `OPEN`. Update each entry to `CONFIRMED` or `RULED OUT` as results come in.
-Add child branches (`└─ L2a`) only when a parent confirms. When the leaf is
-reached, mark it `LEAF` and stop. Anyone reading the transcript sees the full
+Add child branches (`└─ L2a`) only when a parent confirms. When the primary
+leaf is reached, mark it `LEAF` — then check whether any other signal you
+explicitly quantified during the investigation remains open. Each open signal
+becomes a new branch in the map. Anyone reading the transcript sees the full
 investigation shape in the map before reading a single detail section.
 
 If a branch produces nothing actionable, mark it `RULED OUT` in the map and
 write one line in the detail section explaining why. Do not descend further.
+
+Any signal you explicitly quantified (computed a specific rate delta or
+checkout impact for) must appear as a named branch in the map. A branch may
+only be closed as CONFIRMED, RULED OUT, or DATA GAP — not left as a
+narrative observation or inline inference in a detail section.
 
 ---
 
@@ -219,6 +226,12 @@ direct L2+ branches after the cascade determines the fixed segment. Do not
 open funnel queries yet; that comes after L1. Do not deep-dive steps that carry
 less than ~10% of the delta — even if a rate change is visible there, it is not
 the driver.
+
+The Shapley delta for each step is a quantified signal. Any step whose absolute
+contribution you read and recorded counts toward the "close every quantified
+signal" requirement at the end of L2+, regardless of whether it is the primary
+driver. Record the contribution for every step now so the closing check can act
+on it.
 
 See `hypothesis.md` → "L0 signal → first branches to open" for how each
 shapley outcome maps to L2+ branch sets (used after the cascade, not before).
@@ -282,10 +295,9 @@ Log the cascade as its own L1 section in the tree map.
 ### L2+ — Branch and descend (all queries filtered to fixed segment)
 
 The cascade is complete and the fixed segment is declared. Now use the Shapley
-step identified at L0 to direct the first set of branches. Open L2 branches
-for the primary funnel step only — LP2S if LP2S dominated, S2C if S2C
-dominated, C2O if C2O dominated. Every query from this point carries the fixed
-segment filters. Each branch is a specific, falsifiable hypothesis about why
+step identified at L0 to direct the first set of branches. Start with the
+primary funnel step — LP2S if LP2S dominated, S2C if S2C dominated, C2O if
+C2O dominated. Every query from this point carries the fixed segment filters. Each branch is a specific, falsifiable hypothesis about why
 that funnel step dropped in the fixed segment.
 
 A branch is a hypothesis, not an observation. Name the mechanism, the segment
@@ -320,12 +332,38 @@ Each result either:
 
 Continue descending (L2, L3 if needed) until you reach a leaf: a specific
 mechanism at a specific segment/experience/URL/date that fully explains both
-the rate delta and the volume impact. The investigation is complete when you
-reach the leaf — not when the starting pattern list is exhausted. If you've
-run the default patterns and have no leaf, that is a signal to look harder —
-at cross-cuts not yet tested, finer grain not yet drilled, or tables beyond
-the funnel table. Queries at each level are written from scratch — full table
-schemas and column definitions are in `context.md`.
+the rate delta and the volume impact. If you've run the default patterns and
+have no leaf, that is a signal to look harder — at cross-cuts not yet tested,
+finer grain not yet drilled, or tables beyond the funnel table. Queries at
+each level are written from scratch — full table schemas and column
+definitions are in `context.md`.
+
+**A leaf for the dominant driver is not the same as a complete
+investigation.** After confirming the primary leaf, look back at every signal
+you explicitly quantified during the investigation — any experience, funnel
+step, or dimension where you computed a specific rate delta or checkout
+impact. Each of those is a signal you already judged worth measuring. For any
+such signal whose drop is not yet explained by a confirmed mechanism, generate
+a new hypothesis from the context you have (the data in the transcript, the
+inventory findings, the timing pattern) and test it. Do not investigate
+signals you noted but did not quantify — those are observations, not
+commitments. "Consistent with X" without a test is an open branch, not a
+closed one. Close every quantified signal as CONFIRMED, RULED OUT, or DATA
+GAP before declaring the investigation complete.
+
+The question for a secondary funnel step is narrower than for the primary:
+not "what broke and why?" but "is this an independent mechanism, or is it
+explained by what we already found?" A single decomposition query (e.g.,
+reading `c2o_sub` from `summary.json` and running the fixed-segment
+aggregate) is usually sufficient to close it. If the secondary step is flat
+or improved within the fixed segment, state that the CE-level Shapley figure
+originates outside the fixed segment and close the branch. Only descend
+further if the secondary step shows a meaningful decline *within the fixed
+segment* that is not directionally explained by the primary finding — that is
+the signal that an independent mechanism exists. Do not open sub-branches on
+noisy data: if the daily volume reaching the secondary step is low (fewer than
+~20 events per day on average), note the data limitation and close the branch
+as DATA GAP rather than chasing high-variance day-level patterns.
 
 Run queries with:
 ```bash
@@ -527,3 +565,5 @@ catches it earlier next time, rather than adding more loops within the skill.
 | c019 | 2026-04-29 | Removed "write 2–4 specific, falsifiable hypotheses" from L2+ — this was a leftover artifact from the old Q1/Q2/Q3 model that contradicted the tree structure. L2+ now opens branches from the context.md default set and grows them level-by-level from what the data shows. Branches are not a fixed upfront list. |
 | c021 | 2026-04-29 | Mix cascade repositioned as the routing vs conversion determination (not a blind segment-fixer). L1 section rewritten with three explicit levels, each with a mix exit condition (mix change → routing story) and a conversion path (fix segment, descend). L0 Signal 1 downgraded from a hard gate to an orientation hint — the cascade, not mix_dominance alone, determines the path. hypothesis.md L0 routing table updated to show cascade exits as the first rows, with Shapley rows applying only after a conversion-path cascade. |
 | c020 | 2026-04-29 | Updated file role descriptions: context.md no longer owns "investigation patterns"; hypothesis.md described as two-level branch reference (L0 routing + first-pass branch sets + historical patterns). L2+ pointer updated from context.md to hypothesis.md. |
+| c022 | 2026-05-13 | Two investigation completeness changes: (1) L2+ exit condition — a leaf for the dominant driver no longer ends the investigation. After the primary leaf, every signal that was explicitly quantified during the investigation (a specific rate delta or checkout impact was computed) must be closed as CONFIRMED, RULED OUT, or DATA GAP before the investigation is declared complete. Signals noted but not quantified are observations, not commitments. "Consistent with X" without a direct test is an open branch. (2) Tree map format — explicitly quantified signals must appear as named branches in the map; branches may only be closed as CONFIRMED, RULED OUT, or DATA GAP, not left as narrative observations or inline inferences in a detail section. |
+| c023 | 2026-05-14 | Secondary funnel step coverage fix: (1) Signal 2 (Shapley) now explicitly states that Shapley deltas are quantified signals and count toward the closing coverage requirement — closes the gap where a secondary step above the ~10% threshold was noted but never tested. (2) L2+ opening changed from "primary funnel step only" to "primary funnel step first" — removes the prohibition that prevented secondary branches from opening. (3) L2+ closing paragraph gains a secondary-step scoping note: the question for a secondary step is "independent mechanism or explained by primary?" not "what broke and why?"; one decomposition query is usually sufficient; only descend further if the secondary step declines within the fixed segment in a direction not explained by the primary finding; close as DATA GAP if daily volume is too low to be reliable (<~20 events/day average). This keeps secondary checks proportional — a dominant single-driver CE does not spin off unnecessary branches. |

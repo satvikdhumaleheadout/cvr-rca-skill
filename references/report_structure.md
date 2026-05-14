@@ -1114,7 +1114,7 @@ Use `.neg` (red, bold) for meaningful drops, `.pos` (green, bold) for gains, pla
 
 ---
 
-### Ruled-out dimensions block (always last in Section 3)
+### Ruled-out dimensions block (second-to-last in Section 3)
 
 ```html
 <div class="analysis-block">
@@ -1127,6 +1127,75 @@ Use `.neg` (red, bold) for meaningful drops, `.pos` (green, bold) for gains, pla
     <li style="margin-bottom:8px;"><strong>Language:</strong> [what moved and why it is not independent]</li>
     <li style="margin-bottom:0;"><strong>Page type:</strong> [what moved or "Not a driver"]</li>
   </ul>
+</div>
+```
+
+---
+
+### Hypotheses explored (always last in Section 3)
+
+A structured log of every hypothesis generated and tested during the
+investigation. Shows the full exploration shape: what was proposed, what the
+test was, what it led to, and — critically — what was attempted but couldn't
+be resolved. This block earns its place by being honest about the
+investigation's limits, not just its conclusions.
+
+Render as an `.analysis-block` table at the very end of Section 3, after the
+ruled-out dimensions block. Every hypothesis generated during the
+investigation must appear — confirmed, ruled out, and open alike. A
+hypothesis that was tested and ruled out is as valuable to show as one that
+was confirmed. A `🔄` row is an honest acknowledgment that the investigation
+reached a data boundary; it invites the stakeholder to pick it up.
+
+**Outcome values:**
+- ✅ **Confirmed** — test produced a specific positive finding
+- ❌ **Ruled out** — test produced a specific negative result
+- ⚠️ **Data gap** — couldn't test; name the data or tool that would close it
+- 🔄 **Consistent with, not directly tested** — data pattern fits the
+  hypothesis but no direct test was run; name what the direct test would be
+
+```html
+<div class="analysis-block">
+  <div class="block-title">Hypotheses Explored</div>
+  <p style="font-size:13px;color:#555;margin-bottom:14px;">
+    Every hypothesis generated during this investigation — confirmed, ruled out, and open.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Hypothesis</th>
+        <th>Test run</th>
+        <th class="num" style="width:100px;">Outcome</th>
+        <th>What this means</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>[Hypothesis — what was proposed and why]</td>
+        <td>[What was checked — e.g. "inventory daily time-series for TID 80074"]</td>
+        <td class="num">✅ Confirmed</td>
+        <td>[One sentence: what the finding means for the CE]</td>
+      </tr>
+      <tr>
+        <td>[Hypothesis — what was proposed and why]</td>
+        <td>[What was checked — e.g. "price table for all TGIDs pre vs post"]</td>
+        <td class="num">❌ Ruled out</td>
+        <td>[One sentence: why this hypothesis was eliminated]</td>
+      </tr>
+      <tr>
+        <td>[Hypothesis — what was proposed and why]</td>
+        <td>[What you would have checked — e.g. "session recordings on select page"]</td>
+        <td class="num">⚠️ Data gap</td>
+        <td>[One sentence: what data or tool is missing and who could provide it]</td>
+      </tr>
+      <tr>
+        <td>[Hypothesis — what was proposed and why]</td>
+        <td>[Indirect evidence only — e.g. "supply healthy, price flat; no direct user-journey test"]</td>
+        <td class="num">🔄 Untested</td>
+        <td>[One sentence: what the direct test would be]</td>
+      </tr>
+    </tbody>
+  </table>
 </div>
 ```
 
@@ -1297,3 +1366,4 @@ Plotly.newPlot('trend-90day', traces90d, {
 | c017 | 2026-05-07 | Restored mandatory Geo / Non-Geo overview block: (1) added "Geo / Non-Geo overview" row to "What belongs in Section 3" table as always-present; (2) added "### Geo / Non-Geo overview block" section between the Fixed Segment banner and Shapley block — includes four verdict forms (Geo-concentrated / Non-Geo-concentrated / Uniform / Mix-dominant), HTML table template (top countries by volume, home country always included, highlight-row on concentrated segment), and downstream-limitation note for Geo/Non-Geo concentrated outcomes only. |
 | c018 | 2026-05-07 | Three output-quality fixes from CE 6495 evaluation: (1) Inventory time-series — added "Omit non-informative buckets" rule: if a lead-time bucket is uniformly healthy across all experiences for the full post period, replace the chart with a single inline sentence rather than rendering an empty-signal chart. (2) LY data guard — changed behavior from replacing the chart div with a warning banner to always rendering the chart and inserting a visible amber ⚠️ badge after it; grey subtext is no longer an acceptable placement for the LY-absent notice. (3) Plotly conventions — added rule requiring color names in verdict lines, callouts, and subtext to be derived from the explicitly-assigned hex values in the chart's `colors` object, not inferred from Plotly default color order or trace position. |
 | c019 | 2026-05-07 | Inventory section redesigned for multi-TID accuracy and period-median summary tables: (1) TID selection for charts changed from hardcoded multi-TGID traces to contribution-based: one depleted TID → individual trace; multiple depleted TIDs within one TGID → aggregate into one trace; mixed → depleted only with healthy TIDs noted in disclosure banner; all healthy → aggregate all. For multiple TGIDs: one trace per TGID applying the same logic. (2) Yellow disclosure banner added — always rendered immediately before the 4 line charts. Amber style matching LY callout. States exactly which TIDs/data the charts cover, with single-TID, aggregated, mixed-exclusion, and multi-TGID text variants. (3) Path A table replaced: "current-state snapshot" (today's MAX extracted_date) replaced with "post-period median table" — columns renamed to Median 0–2d/3–7d/8–13d/14–30d; orange banner updated; highlight-row now signals near-zero post-period median, not today's state. (4) Path B table replaced: snapshot-based Pre/Post columns replaced with Pre Median / Post Median columns from the period-median queries. Plotly implementation simplified: scope-based traces (scope1/scope2) replace hardcoded tgid1/tgid2/tgid3. |
+| c020 | 2026-05-13 | Added "Hypotheses explored" block — always last in Section 3, after the ruled-out dimensions block (which is now second-to-last). Four-column table (Hypothesis · Test run · Outcome · What this means) with four outcome values: ✅ Confirmed, ❌ Ruled out, ⚠️ Data gap (name what would close it), 🔄 Consistent with — not directly tested (name what the direct test would be). Every hypothesis generated during the investigation must appear — confirmed, ruled out, and open alike. Forces honest documentation of data limits and untested inferences rather than allowing them to disappear into narrative subtext. |
