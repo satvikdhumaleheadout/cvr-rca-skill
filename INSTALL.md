@@ -117,13 +117,15 @@ Tell the user the installed version, then give this summary:
 > /cvr-rca 167
 > ```
 >
-> To investigate a specific window, just describe it in plain English —
-> Claude will work out the dates:
+> To investigate a specific window, use plain English or exact dates —
+> either works:
 > ```
 > /cvr-rca 167 last complete week vs the week before it
 > /cvr-rca 167 this year vs same time last year
 > /cvr-rca 167 April vs March
+> /cvr-rca 167 2026-03-01 2026-03-31 2026-04-01 2026-04-30
 > ```
+> (exact date format: `pre_start pre_end post_start post_end`)
 >
 > ---
 >
