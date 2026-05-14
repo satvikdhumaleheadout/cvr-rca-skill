@@ -14,13 +14,48 @@ description: >
 
 ## Before you begin
 
+Derive the skill directory from the path of this SKILL.md file you just read.
+For example, if you read it from `~/.cvr-rca/SKILL.md`, then:
+
 ```bash
-SKILL_DIR=~/Documents/RCA\ skill/cvr-rca
+SKILL_DIR=~/.cvr-rca
+```
+
+If the user has a custom install location, use that path instead. The variable
+must point to the directory that contains this file.
+
+Then read the reference files:
+
+```bash
 cat "$SKILL_DIR/references/context.md"
 cat "$SKILL_DIR/references/hypothesis.md"
 cat "$SKILL_DIR/references/actions.md"
 cat "$SKILL_DIR/references/report_structure.md"
 ```
+
+### Version check
+
+Run this before proceeding:
+
+```bash
+INSTALLED=$(cat "$SKILL_DIR/VERSION" 2>/dev/null || echo "0.0.0")
+LATEST=$(curl -s --max-time 3 \
+  https://raw.githubusercontent.com/satvikdhumaleheadout/cvr-rca-skill/main/VERSION \
+  2>/dev/null || echo "unknown")
+MIN=$(curl -s --max-time 3 \
+  https://raw.githubusercontent.com/satvikdhumaleheadout/cvr-rca-skill/main/MIN_VERSION \
+  2>/dev/null || echo "unknown")
+```
+
+- If `LATEST` or `MIN` is `unknown` (no internet): continue silently.
+- If `INSTALLED` < `MIN`: **stop**. Tell the user:
+  > "Your CVR-RCA skill (v`INSTALLED`) is below the minimum required version
+  > (v`MIN`). Please update before running: see `~/.cvr-rca/INSTALL.md`."
+- If `INSTALLED` < `LATEST` (but ≥ `MIN`): continue, then append a soft note at
+  the end of Step 1 output:
+  > "A newer version of CVR-RCA (v`LATEST`) is available. Run the update steps
+  > in `~/.cvr-rca/INSTALL.md` when convenient."
+- If `INSTALLED` = `LATEST`: continue silently.
 
 Each file owns a distinct concern:
 
@@ -71,7 +106,7 @@ bash "$SKILL_DIR/scripts/run_analysis.sh" \
 ```
 
 This produces `summary.json` inside a run folder under
-`~/Documents/RCA\ skill/Test\ Runs/`. The folder is named
+`~/Documents/CVR RCA Runs/` (or `$CVR_RCA_OUTPUT_DIR` if set). The folder is named
 `ce<ce_id>_<pre_start>_<post_end>/`. If that folder already exists (a previous
 run on the same CE and dates), the script auto-increments: `_run2/`, `_run3/`,
 etc. The script prints the chosen folder name — call it `<run_dir>` for the
@@ -433,20 +468,27 @@ Save to: `<run_dir>/findings.md`
 - **Genuinely unresolvable** → accept "Consistent with" and ensure the report
   language reflects that — do not present it as confirmed
 
-**Specific checks before proceeding:**
+**Checks before proceeding to Step 3 (work through in order):**
 
-- Any calendar event (holiday, peak, school break) cited as a cause → is there
-  a controlled comparison showing the metric with vs. without those dates?
-- Any number that appeared in the investigation but isn't connected to the root
-  cause narrative → either connect it or explicitly rule it out in the report
-- Any recommendation you plan to make → did you actually verify the claim that
-  justifies it, or are you passing an unverified hypothesis to the DRI?
-- **Every count or computed metric cited anywhere in findings.md** — it must
-  have a named Source in the Evidence inventory (a `summary.json` field, a
-  logged BQ query result, or a specific table row that will appear in the
-  report). If you cannot name the source, either derive the number explicitly
-  with written arithmetic, or remove it. A number with no named source must not
-  enter the report — it is a hallucination risk.
+1. **Weekday composition** — count weekday vs weekend days in pre and post. If
+   post has materially more weekends, note this before attributing any rate
+   change to a funnel issue.
+2. **Seasonal / calendar event claim** — if a seasonal or event-based
+   explanation is a primary or secondary driver, is it paired with a
+   corresponding data signal? (see `report_structure.md` Styling guidelines rule
+   4). A traffic pattern, a CVR break aligned to the event date, or a
+   controlled comparison qualifies. Domain knowledge of peak seasons alone does
+   not.
+3. **Every number has a source** — every count or rate in findings.md must name
+   its source (a `summary.json` field, a logged BQ query result, or a specific
+   table row). If a source cannot be named, derive it with written arithmetic or
+   remove it. A number with no named source must not enter the report.
+4. **Every numeric recommendation verified** — if an action card includes a
+   specific percentage, count, or dollar figure, derive it with written
+   arithmetic before committing it to the report. Do not estimate.
+5. **Backlogged branches marked DATA GAP** — any branch whose evidence requires
+   a backlogged source must be closed as `DATA GAP` in the tree map, not
+   `CONFIRMED` or `LEAF` (see Backlogs section above).
 
 Once all open items are resolved or explicitly accepted, proceed to Step 3.
 
@@ -541,6 +583,12 @@ catches it earlier next time, rather than adding more loops within the skill.
 - LP2S price vs LY baseline
 - Bootstrap confidence intervals on Shapley values
 
+**When a branch requires a backlogged source:** Close that branch as `DATA GAP`
+in the tree map — not `CONFIRMED` or `LEAF`. In the action card, reference the
+relevant root cause from `actions.md` (which contains the manual investigation
+steps for each backlogged table) so the DRI receives a specific starting point,
+not generic "investigate further" text.
+
 ---
 
 ## Changelog
@@ -567,3 +615,5 @@ catches it earlier next time, rather than adding more loops within the skill.
 | c020 | 2026-04-29 | Updated file role descriptions: context.md no longer owns "investigation patterns"; hypothesis.md described as two-level branch reference (L0 routing + first-pass branch sets + historical patterns). L2+ pointer updated from context.md to hypothesis.md. |
 | c022 | 2026-05-13 | Two investigation completeness changes: (1) L2+ exit condition — a leaf for the dominant driver no longer ends the investigation. After the primary leaf, every signal that was explicitly quantified during the investigation (a specific rate delta or checkout impact was computed) must be closed as CONFIRMED, RULED OUT, or DATA GAP before the investigation is declared complete. Signals noted but not quantified are observations, not commitments. "Consistent with X" without a direct test is an open branch. (2) Tree map format — explicitly quantified signals must appear as named branches in the map; branches may only be closed as CONFIRMED, RULED OUT, or DATA GAP, not left as narrative observations or inline inferences in a detail section. |
 | c023 | 2026-05-14 | Secondary funnel step coverage fix: (1) Signal 2 (Shapley) now explicitly states that Shapley deltas are quantified signals and count toward the closing coverage requirement — closes the gap where a secondary step above the ~10% threshold was noted but never tested. (2) L2+ opening changed from "primary funnel step only" to "primary funnel step first" — removes the prohibition that prevented secondary branches from opening. (3) L2+ closing paragraph gains a secondary-step scoping note: the question for a secondary step is "independent mechanism or explained by primary?" not "what broke and why?"; one decomposition query is usually sufficient; only descend further if the secondary step declines within the fixed segment in a direction not explained by the primary finding; close as DATA GAP if daily volume is too low to be reliable (<~20 events/day average). This keeps secondary checks proportional — a dominant single-driver CE does not spin off unnecessary branches. |
+| c024 | 2026-05-14 | Backlogs — added DATA GAP closure rule: when a branch's primary evidence path leads to a backlogged source, close the branch as DATA GAP in the tree map (not CONFIRMED or LEAF), and cite the relevant `actions.md` root cause in the action card so the DRI receives specific starting steps rather than generic "investigate further" text. |
+| c025 | 2026-05-14 | Step 2b "Specific checks before proceeding" rewritten as a numbered 5-item checklist: (1) weekday composition, (2) seasonal/calendar event claims must be paired with a data signal (cross-reference to report_structure.md Styling rule 4), (3) every number has a named source, (4) every numeric recommendation verified with arithmetic, (5) backlogged branches must be closed as DATA GAP. Replaces the previous unordered prose list. |

@@ -32,7 +32,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REFS_DIR="$SCRIPT_DIR/../references"
 
 # ── Output directory — auto-increment if folder already exists ─────────────
-_BASE_DIR="${HOME}/Documents/RCA skill/Test Runs/ce${CE_ID}_${PRE_START}_${POST_END}"
+# CVR_RCA_OUTPUT_DIR env var overrides the default; set it in ~/.zshrc to
+# keep runs in a custom location (e.g. your existing "Test Runs" folder).
+_BASE_DIR="${CVR_RCA_OUTPUT_DIR:-${HOME}/Documents/CVR RCA Runs}/ce${CE_ID}_${PRE_START}_${POST_END}"
 if [ ! -d "$_BASE_DIR" ]; then
   OUTPUT_DIR="$_BASE_DIR"
 else
