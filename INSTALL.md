@@ -98,10 +98,43 @@ Tell the user the installed version, then give this summary:
 > - Runs folder: `~/Documents/CVR RCA Runs/`
 >
 > **Restart Claude Code** (quit and reopen) for the `/cvr-rca` command to
-> appear in the picker. Then run `/cvr-rca <ce_id>` to start an analysis.
+> appear in the picker.
 >
-> Optional: if you want runs saved to a different folder, add this to
-> `~/.zshrc`:
+> ---
+>
+> **How to run an analysis:**
+>
+> The basic command is:
+> ```
+> /cvr-rca <ce_id>
+> ```
+> This defaults to **last 30 days as the post period** and the **30 days
+> before that as the pre period**. Use this when you've noticed a recent
+> drop and want to investigate immediately.
+>
+> Example:
+> ```
+> /cvr-rca 167
+> ```
+>
+> To specify your own date ranges — for example if the drop happened a few
+> weeks ago and you want to pin the exact window:
+> ```
+> /cvr-rca <ce_id> <pre_start> <pre_end> <post_start> <post_end>
+> ```
+>
+> Example:
+> ```
+> /cvr-rca 167 2026-03-01 2026-03-31 2026-04-01 2026-04-30
+> ```
+> This compares March (pre) vs April (post) for CE 167.
+>
+> All dates are in `YYYY-MM-DD` format.
+>
+> ---
+>
+> Optional: if you want run outputs saved to a different folder than
+> `~/Documents/CVR RCA Runs/`, add this to `~/.zshrc`:
 > ```
 > export CVR_RCA_OUTPUT_DIR=~/Documents/your-preferred-folder
 > ```
