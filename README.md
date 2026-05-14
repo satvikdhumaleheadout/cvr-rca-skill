@@ -58,11 +58,12 @@ English or exact dates — either works:
 
 ## Updating
 
-To update to the latest version, re-run the install curl command (your runs
-folder is untouched). See [INSTALL.md](INSTALL.md) for the exact steps.
+Paste this in Claude Code or Cowork:
 
-The skill checks for updates automatically on each invocation and will notify
-you when a newer version is available.
+> Update the skill from this URL: `https://raw.githubusercontent.com/satvikdhumaleheadout/cvr-rca-skill/refs/heads/main/INSTALL.md`
+
+Your runs folder is untouched. The skill also checks for updates automatically
+on each invocation and will nudge you when a newer version is available.
 
 ---
 
