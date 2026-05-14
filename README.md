@@ -20,45 +20,31 @@ single command.
 
 ## Install
 
-See **[INSTALL.md](INSTALL.md)** for step-by-step instructions (no git required).
+Open Claude Code or Cowork and paste this message:
 
-**TL;DR** for those comfortable with Terminal:
+> Install the skill from this URL: `https://raw.githubusercontent.com/satvikdhumaleheadout/cvr-rca-skill/refs/heads/main/INSTALL.md`
 
-```bash
-curl -L https://github.com/satvikdhumaleheadout/cvr-rca-skill/archive/refs/heads/main.zip \
-  -o /tmp/cvr-rca-install.zip && \
-unzip -q /tmp/cvr-rca-install.zip -d /tmp/ && \
-rm -rf ~/.cvr-rca && mv /tmp/cvr-rca-skill-main ~/.cvr-rca && \
-rm /tmp/cvr-rca-install.zip && \
-mkdir -p ~/.claude/commands && \
-cat > ~/.claude/commands/cvr-rca.md << 'EOF'
----
-description: CVR Root Cause Analysis for a Headout Combined Experience.
----
-
-Read the skill file at: ~/.cvr-rca/SKILL.md
-EOF
-mkdir -p ~/Documents/CVR\ RCA\ Runs
-```
-
-Restart Claude Code, then type `/cvr-rca`.
+Claude will handle everything — downloading the files, registering the `/cvr-rca` command, and creating the output folder. Restart Claude Code when it's done.
 
 ---
 
 ## Usage
 
 ```
-/cvr-rca <ce_id> [<pre_start> <pre_end> <post_start> <post_end>]
+/cvr-rca <ce_id>
+/cvr-rca <ce_id> <window in plain English or exact dates>
 ```
 
-**Examples:**
+No dates defaults to last 30 days vs the prior 30 days. Otherwise use plain
+English or exact dates — either works:
 
 ```
 /cvr-rca 167
-/cvr-rca 167 2024-03-01 2024-03-30 2024-03-31 2024-04-29
+/cvr-rca 167 last complete week vs the week before it
+/cvr-rca 167 this year vs same time last year
+/cvr-rca 167 April vs March
+/cvr-rca 167 2026-03-01 2026-03-31 2026-04-01 2026-04-30
 ```
-
-Dates are optional — when omitted, defaults to last 30 days vs the prior 30 days.
 
 ---
 
