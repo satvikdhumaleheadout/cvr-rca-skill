@@ -168,7 +168,23 @@ The drop is broad, no pricing explanation, no concentrated locus. Session record
 
 S2C is about whether users on the select/date-picker page proceed to checkout.
 
-**Run dimension cuts in parallel:**
+**If S2C is a secondary driver (primary driver is C2O or LP2S):** The question
+is not "what caused the S2C drop?" but "is this an independent mechanism from
+what we already found?" Run the fixed-segment aggregate for S2C first (one query
+reading the S2C rate within the fixed segment). Two outcomes:
+- **S2C flat or improved within the fixed segment** — the CE-level Shapley
+  contribution originates outside the fixed segment. Close as RULED OUT and move
+  on. No first-pass branches needed.
+- **S2C declined within the fixed segment** — check whether the decline is
+  directionally explained by the primary finding (same seasonal mechanism, same
+  experience locus, same demand composition shift). If yes, close as CONFIRMED
+  with a one-line explanation and note it shares the mechanism. Only open the
+  first-pass branches below if S2C shows a meaningful decline within the fixed
+  segment that is *not* directionally explained by the primary finding — that is
+  the signal an independent mechanism exists.
+
+**If S2C is the primary driver, or if it has an independent mechanism not
+explained by the primary finding, run dimension cuts in parallel:**
 - `language` × S2C rate pre/post — a drop in one language points to a localised
   select-page issue (broken date-picker for that locale, geo-specific pricing
   shock at variant selection)
@@ -206,7 +222,7 @@ Sort descending. Investigate the TGIDs that explain the majority of the checkout
 
 One TGID maps to multiple TIDs (time slots, language variants, ticket types). The queries in `context.md → inventory analysis` always operate at TID level within a TGID.
 
-**2. Check data availability** (see `context.md → inventory availability → data availability`). If the entire RCA period is outside the 30-day window, skip the inventory queries and state the data limitation.
+**2. Check data availability** (see `context.md → inventory availability → data availability`). If both the pre and post periods are outside the 30-day window, skip the inventory queries and state the data limitation. However, if `post_end` is within roughly 30 days of today, the post period may still be queryable — in that case, run Path A for the post period only. A near-zero post-period median on the losing experience is directional supply evidence even without pre-period data. Note clearly in the transcript that only one period was available and treat the finding as supporting context, not a confirmed cause.
 
 **3. For a gradual S2C decline** (drift over multiple weeks): before running inventory queries, pull `days_to_first_available_date` from `product_rankings_features` for the concentrated TGID pre vs post. An increasing trend (users see a progressively thinner near-term calendar) confirms supply scarcity direction quickly. This is a fast pre-check, not a substitute for the inventory queries.
 
@@ -278,11 +294,18 @@ Three hypotheses to run in parallel:
 DRI for A2O: Payments team (gateway/fraud) or Engineering/Ops (live inventory
 sync failures).
 
+**If C2O improved via an experience routing shift** (one experience gained checkout dominance at the expense of another), one useful follow-up is to ask *why* the gaining experience drew more demand. Two quick checks using `product_rankings_features`:
+
+- **Pricing signal**: Compare `final_price_usd` for the gaining and losing experiences pre vs post. If the gaining experience is materially cheaper, that's a demand signal worth noting. If pricing is comparable between the two, pricing is unlikely to be the mechanism — points toward supply, catalog presentation, or ranking position instead.
+- **Availability signal**: Compare `days_to_first_available_date` for each experience post-period. If the gaining experience consistently has near-term slots and the losing experience has a long lead time (or none), that's consistent with a supply-driven shift — more bookable inventory driving more checkouts.
+
+These checks are directional, not conclusive. If both experiences show similar pricing and availability, the shift is more likely driven by catalog or ranking changes that aren't visible in these tables — flag as a DATA GAP and note in the action card. Don't force a mechanism claim if the data doesn't support one.
+
 ---
 
 ## URL concentration — a cross-cutting check
 
-URL concentration is a legitimate hypothesis regardless of which funnel step is primary — it shapes both the mechanism and the DRI. Run the canonical L2+ query from `context.md` with `page_url` as the dimension. Apply a majority-contributor filter: only include URLs that account for a meaningful share of CE LP traffic on the fixed segment — long-tail URLs produce high-variance rate estimates and should be treated as directional at best.
+URL concentration is a legitimate hypothesis regardless of which funnel step is primary — it shapes both the mechanism and the DRI. Run the URL breakdown query from `context.md` (not the canonical L2+ query — that query does not produce `pct_of_lp`). Apply a majority-contributor filter: only include URLs that account for a meaningful share of CE LP traffic on the fixed segment — long-tail URLs produce high-variance rate estimates and should be treated as directional at best.
 
 A drop concentrated in a few high-traffic URLs points to something specific about those pages (a template change, a specific experience listed, the audience those URLs attract). A drop spread uniformly across all high-traffic URLs points to a CE-wide mechanism (availability, pricing, platform change). These two findings call for different root causes and different action owners.
 
@@ -482,4 +505,6 @@ Before diagnosing any funnel step: if mix is dominant, the story is about traffi
 | c012 | 2026-05-07 | Inventory investigation steps 4 and 5 updated: (1) Step 4 renamed from "TID snapshot query" to "median query" (Path A post-period median / Path B pre/post median). Added explicit bridge enforcement: always query through `experience_id → dim_tours` — never hardcode a `tour_id`. Added contributing TID identification: near-zero post-period median (Path A) or significant post vs pre median drop (Path B). Added TID-to-chart scoping rule: one locus → single TID trace; multiple depleted → TGID aggregate; mixed → depleted only with healthy TIDs noted in chart banner. (2) Step 5 updated to reference scoping derived from step 4 rather than the snapshot. |
 | c013 | 2026-05-07 | Step 4 bridge corrected and booking-horizon pre-check added: (1) Bridge changed from `experience_id → dim_tours` to `experience_id → dim_experience_management WHERE variant_status = 'Active'`. Reason: `dim_tours` has no `variant_status` column — returns Disabled TIDs, causing wrong TID selection (CE 189 post-mortem: TID 67659 Disabled was queried; Active TIDs 17000/17521 were missed). (2) Booking-horizon pre-check added as a mandatory step before running the median query: if `min_lead_time > 30` in the post period, standard bucket ceiling is mismatched to the product's horizon and all buckets return zeros that are not a supply signal. Pointer to `context.md → Booking-horizon pre-check` added. |
 | c014 | 2026-05-08 | Removed booking-horizon pre-check reference from Step 4 (added in c013). The motivating example (Vatican Museums as a 60–90 day horizon product) was factually wrong; the pre-check added an unnecessary mandatory query with no analytical benefit, since zeros in both periods are already correctly handled by the "flat and stable → supply ruled out" interpretation. Bridge fix (dim_experience_management WHERE variant_status = 'Active') retained. |
-| c015 | 2026-05-13 | Added URL-level analysis to LP2S investigation and fixed the broken URL concentration cross-cutting check. (1) LP2S first-pass branches: added `page_url` × LP2S rate and volume as an explicit parallel first-cut dimension — checks both volume shift between URLs (routing story) and rate change on specific URLs (page-specific story) independently; majority-contributor filter note added. Updated "if a dimension concentrates" follow-up to reflect that when URL itself concentrates at the first cut, it is the direct finding, not a secondary drill-down. (2) URL concentration cross-cutting check: removed broken `summary.json` URL breakdown reference (that field does not exist). Replaced with: run the canonical L2+ query with `page_url` as dimension. Rewrote sub-bullets for Mix/LP2S/S2C/C2O to be operationally executable and conceptually accurate — specifically, clarified that `page_url` in S2C context is the session-entry URL (landing page), not the select-page URL, so S2C differences by URL reflect user composition (intent) rather than select-page UX. C2O sub-bullet updated to flag URL as a weak lens for checkout-stage drops. |
+| c015 | 2026-05-13 | Added URL-level analysis to LP2S investigation and fixed the broken URL concentration cross-cutting check.
+| c016 | 2026-05-14 | S2C first-pass branches — added secondary-driver scoping block at the top of the section, aligned with SKILL.md c023. When S2C is a secondary driver: run the fixed-segment aggregate first; if flat or improved outside the fixed segment, close as RULED OUT; if declined within the fixed segment but directionally explained by the primary finding, close as CONFIRMED with one-line explanation; only open the full first-pass branch set if S2C shows an independent decline not explained by the primary mechanism. Prevents unnecessary dimension cuts on secondary steps while ensuring the coverage requirement from c023 is met. | (1) LP2S first-pass branches: added `page_url` × LP2S rate and volume as an explicit parallel first-cut dimension — checks both volume shift between URLs (routing story) and rate change on specific URLs (page-specific story) independently; majority-contributor filter note added. Updated "if a dimension concentrates" follow-up to reflect that when URL itself concentrates at the first cut, it is the direct finding, not a secondary drill-down. (2) URL concentration cross-cutting check: removed broken `summary.json` URL breakdown reference (that field does not exist). Replaced with: run the canonical L2+ query with `page_url` as dimension. Rewrote sub-bullets for Mix/LP2S/S2C/C2O to be operationally executable and conceptually accurate — specifically, clarified that `page_url` in S2C context is the session-entry URL (landing page), not the select-page URL, so S2C differences by URL reflect user composition (intent) rather than select-page UX. C2O sub-bullet updated to flag URL as a weak lens for checkout-stage drops. |
+| c017 | 2026-05-08 | URL concentration cross-cutting check: updated the query pointer from "Run the canonical L2+ query from `context.md` with `page_url` as the dimension" to "Run the URL breakdown query from `context.md` (not the canonical L2+ query — that query does not include `pct_of_lp`)". Reason: the URL concentration section explicitly requires both volume share and rate checks to distinguish routing vs performance stories. The canonical query only answers the rate question. Without `pct_of_lp`, Claude would construct the totals CTE on the fly — the class of error flagged in the insights report. The dedicated query (added to context.md c026) is the correct reference. |

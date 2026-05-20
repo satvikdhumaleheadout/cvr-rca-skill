@@ -4,6 +4,43 @@ This file tracks every meaningful change pushed to this repository. Each entry c
 
 ---
 
+## [v1.9] — 2026-05-20 — URL breakdown query, S2C secondary-driver scoping, Section 3 ordering, action card quality gates
+
+**Summary:** Five connected quality upgrades, most motivated by gaps identified in recent CE 2330 and CE 189 evaluations. A dedicated URL breakdown query (`pct_of_lp` CTE) is added to `context.md` and wired into `hypothesis.md` and `report_structure.md` — replacing the canonical L2+ query wherever URL routing vs performance disambiguation is needed. `hypothesis.md` gains a secondary-driver scoping block for S2C (prevents unnecessary first-pass branches when S2C is not the primary driver) and a C2O experience-routing follow-up sequence. `report_structure.md` gains a fixed Section 3 ordering, a URL-level breakdown HTML block, an action card evidence threshold rule, and multi-step "What broke?" examples. `actions.md` gains a DATA GAP template for the RC9 unresolved A2O mechanism case. `SKILL.md` gains two new findings-gate items: fixed-segment reflection check and action card data-accessibility check.
+
+### Changes by file
+
+**`SKILL.md`**
+- **Depth vs completeness clarification** — Added a note below the branch completeness rule: the rule is about map coverage, not depth. A one-line closure ("same mechanism as C2O — CONFIRMED" or "A2O within-experience improvement: mechanism untested — DATA GAP") satisfies completeness without requiring a full investigation branch for every minor quantified signal.
+- **Findings gate item 6 — Fixed segment reflected in analysis** — New checklist item: if a fixed segment was declared at the end of the mix cascade, verify that L2+ queries actually apply those filters. If a broader cut was used as a proxy, note it explicitly and confirm it is a reasonable approximation. No silent mismatches between the declared segment and the data used.
+- **Findings gate item 7 — Action cards reference accessible data** — New checklist item: before writing an action card that asks a team to investigate a specific period or data point, confirm that data is reachable via analytics. If it falls outside a rolling window or a backlogged table, name an alternative source (availability system logs, supplier contracts) so the DRI knows where to look.
+
+**`references/context.md`** — c026
+- Added dedicated URL breakdown query immediately after the canonical L2+ query pattern. The new query adds a `totals` CTE that computes `pct_of_lp` — each URL's share of CE LP traffic per period. Required to distinguish routing shifts (traffic moved between URLs, rates held) from performance shifts (a URL's own rate dropped, share held). The canonical L2+ query cannot answer the routing question. Carries all fixed segment filters from the cascade declaration; sorts by `users_lp DESC`.
+
+**`references/hypothesis.md`** — c016, c017
+- **c016 — S2C secondary-driver scoping block** — Added at the top of the S2C section: when S2C is a secondary driver (primary is C2O or LP2S), run the fixed-segment aggregate first. If flat/improved outside the fixed segment → close as RULED OUT. If declined but directionally explained by the primary finding → close as CONFIRMED with one-line explanation. Only open the full first-pass branch set if S2C shows an independent decline not explained by the primary mechanism. Prevents unnecessary dimension cuts on secondary steps.
+- **C2O experience routing follow-up** — When C2O improved via an experience routing shift, two directional follow-up checks added using `product_rankings_features`: pricing signal (compare `final_price_usd` for gaining vs losing experience pre/post) and availability signal (compare `days_to_first_available_date`). Both are directional; if neither explains the shift, flag as DATA GAP rather than forcing a mechanism claim.
+- **c017 — URL concentration pointer updated** — URL concentration cross-cutting check now points to the dedicated URL breakdown query from `context.md` instead of the canonical L2+ query. Reason: the section requires `pct_of_lp` to distinguish routing vs performance stories; the canonical query does not produce that column.
+
+**`references/actions.md`** — c004
+- **RC9 DATA GAP action template** — Added a template action card for when the A2O locus is confirmed but the specific mechanism is unresolved because `order_attempted_events_v2` was not queried (backlogged). Template provides: a specific BQ query scope (experience ID + post period), and three sub-hypotheses for the DRI to test (inventory sync failure → Ops/Engineering; gateway decline → Payments; fraud over-blocking → Payments rule audit). Ensures the DRI receives a starting hypothesis rather than generic "investigate further" text.
+
+**`references/report_structure.md`** — c021, c022, c023, c024
+- **c021 — Section 1c "What broke?" multi-step examples** — When multiple funnel steps each carry >15% Shapley share, name all of them in one sentence. Two examples added: one for multi-step same-mechanism case, one for multi-step different-mechanism case. Cross-reference note added under "Why did it break?" requiring seasonal/event-based framing to be paired with a specific data signal (traffic pattern, daily CVR break, or controlled comparison).
+- **c022 — Action card evidence threshold** — Before creating a standalone action card, verify both the rate drop and raw event count. A directional signal from a small sample belongs as a sub-bullet inside the most relevant existing P1/P2 card, not a standalone card. Example sub-bullet wording provided.
+- **c023 — Section 3 fixed ordering** — "What belongs in Section 3" now specifies a numbered fixed order for always-present blocks: (1) mix cascade + Fixed Segment banner, (2) Geo/Non-Geo, (3) Shapley, (4) daily trend, (5) primary driver cuts, (6) secondary driver evidence, (7) ruled-out dimensions, (8) hypotheses explored. Conditional blocks (inventory, session recordings, price) slot within primary driver evidence.
+- **c024 — URL-level breakdown block HTML pattern** — New section before the inventory section format. Two verdict forms: performance verdict (rate dropped, share held) and routing verdict (share shifted, rates held). Table columns: URL · Period · Users · % of LP · LP2S · S2C · C2O · CVR. `.highlight-row` on URLs where rate dropped meaningfully or `pct_of_lp` shifted substantially. Pointer to the dedicated URL breakdown query in `context.md`.
+
+### Test runs
+
+Three new runs added (`v1.9`):
+- **ce189_2026-04-09_2026-05-06** (Vatican Museums) — TBD/35
+- **ce2330_2026-03-13_2026-05-12_run2** (Walt Disney World Orlando) — TBD/35
+- **ce6495_2026-03-13_2026-05-12** (Kualoa Ranch) — TBD/35
+
+---
+
 ## [v1.0] — 2026-04-27 — Initial release
 
 **Summary:** First versioned release of the CVR-RCA skill. Establishes the full investigation framework, reference files, SQL pipeline, rendering helpers, and evaluation rubric.
@@ -188,7 +225,7 @@ This makes the skill easier to maintain: process changes update `SKILL.md`, anal
 
 ---
 
-## [v1.7] — 2026-05-07 — context.md/hypothesis.md structural separation + presentation-layer jargon fixes
+## [v1.8] — 2026-05-07 — context.md/hypothesis.md structural separation + presentation-layer jargon fixes
 
 **Summary:** Two connected changes. First, investigation decision logic was moved out of `context.md` and into `hypothesis.md`, restoring the intended separation: `context.md` owns business vocabulary, table schemas, and SQL queries; `hypothesis.md` owns the investigation decision tree (when to run what, how to interpret results, which branches to open). Second, three presentation-layer bugs were fixed in `report_structure.md` that were allowing internal investigation terminology to leak into the HTML report, and raw tables to appear where Plotly charts should be.
 

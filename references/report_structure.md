@@ -63,7 +63,11 @@ One callout box — the most important element in the entire report. It answers 
 - **What broke?** Name the specific thing that failed — not just a metric name.
   - ❌ "LP2S declined"
   - ✅ "S2C fell from 25.6% to 24.2%, concentrated almost entirely in the HO segment — where S2C collapsed from 35.7% to 23.4% on 21% more select-page visitors"
+  - When multiple funnel steps all declined meaningfully (each carrying >15% Shapley share), name all of them in one sentence rather than picking one and ignoring the others:
+  - ✅ "C2O fell 3.2pp (59% of the decline), driven by Magic Kingdom checkout failures and lower checkout intent post-spring-break. S2C also fell 2.7pp (27%) for the same seasonal reason — the same mechanism explains both."
+  - ✅ "S2C collapsed 12pp (83% of the decline) on the HO channel, where the date-picker showed no available slots on TGIDs 7148 and 8821. LP2S and C2O also declined modestly (17% combined) but are explained by the same supply gap reducing visible options."
 - **Why did it break?** The mechanism — what it means, not what the data shows.
+  - When using seasonal or event-based framing, it must be paired with a specific data signal (a traffic pattern, a daily CVR break aligned to the event date, or a controlled comparison). See Styling guidelines rule 4 above.
 - **When did it break?** Exact date (sudden) or window (gradual).
 
 **When CVR improved:** Green left border (`#2e7d32`), heading "CVR Improved — What's Driving It & What's Holding It Back". Three questions:
@@ -100,6 +104,7 @@ One card per confirmed root cause:
 - If more than 3 distinct causes, top 3 get full cards. Additional findings get a one-paragraph summary at the start of Section 3 under "Additional findings"
 - If only one root cause, one card is correct. Do not pad with unconfirmed hypotheses
 - No card saying "monitor the situation" or "investigate further"
+- **Evidence threshold before creating a card:** check both the rate drop AND the raw event count. If the rate drop is large but the event count is small relative to total CE checkouts (directional signal, not a confirmed finding), fold it as a sub-bullet inside the most relevant existing P1/P2 card rather than creating a standalone card. A directional signal earns a sub-bullet: *"Also check whether [channel] A2O anomaly is a separate issue — rate crashed but n=[N] attempts; validate sample before acting."* It does not earn its own action card.
 
 ### DRI naming standard
 
@@ -130,7 +135,19 @@ Example after the lead-time chart:
 
 ### What belongs in Section 3
 
-Include only analyses that directly support or rule out a claim made in Sections 1–2:
+Include only analyses that directly support or rule out a claim made in Sections 1–2.
+
+**Always-present blocks appear in this fixed order:**
+1. Mix cascade analysis block → Fixed Segment banner
+2. Geo / Non-Geo overview
+3. Shapley decomposition
+4. Daily trend chart (C2O / S2C / LP2S for the primary driver)
+5. Primary driver dimension cuts and experience/URL breakdowns (as applicable)
+6. Secondary driver evidence (if applicable — see SKILL.md c023 for scoping)
+7. Ruled-out dimensions block
+8. Hypotheses explored (always last)
+
+Conditional blocks (inventory, session recordings, price analysis) slot between items 5 and 6 within the relevant funnel step's evidence.
 
 | Analysis | When to include |
 |---|---|
@@ -147,6 +164,72 @@ Include only analyses that directly support or rule out a claim made in Sections
 | Inventory daily time-series charts | When S2C drop is confirmed at a specific TGID — always run alongside the TID snapshot. Four line charts (one per lead-time bucket), `extracted_date` on x-axis, total tickets on y-axis. Path B: pre and post as overlaid series. Path A: post series only. Path X: omit entirely — add an inline note in the S2C evidence block: *"Inventory data unavailable — post period ended more than 30 days ago. Supply mechanism cannot be confirmed or ruled out from data."* |
 | Price analysis | When price changed and timing correlates with LP2S onset. |
 | Session recordings | When recordings were pulled — present as a structured table (see below). |
+
+### URL-level breakdown block
+
+Present as a `.analysis-block` when the drop concentrates in specific page URLs or when a routing shift (traffic moved between URLs) is the story. Place within the primary driver evidence, after the dimension cut that first reveals the URL signal.
+
+**Two verdict forms:**
+
+- **Performance verdict** (URL rate dropped, share held): `"LP2S fell on [URL] — traffic share held flat. Something changed on that specific page."`
+- **Routing verdict** (URL share shifted, rate held): `"Traffic shifted away from [URL A] toward [URL B] — per-URL rates held flat. This is a routing story, not a page quality issue."`
+
+Apply `.highlight-row` to URLs where either the rate dropped meaningfully (performance story) OR `pct_of_lp` shifted substantially between pre and post (routing story). Use the URL breakdown query from `context.md` — it is the only query that produces `pct_of_lp`. Only show URLs that represent a meaningful share of CE LP traffic; long-tail URLs have high-variance rates and belong in subtext at most.
+
+```html
+<div class="analysis-block">
+  <div class="block-title">URL Breakdown — [Funnel Step] by Landing Page</div>
+  <div class="verdict-line">[State verdict: routing (volume shifted, rates held) or performance (rate dropped, share held), naming the specific URLs]</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>URL</th>
+        <th>Period</th>
+        <th class="num">Users</th>
+        <th class="num">% of LP</th>
+        <th class="num">LP2S</th>
+        <th class="num">S2C</th>
+        <th class="num">C2O</th>
+        <th class="num">CVR</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- highlight-row on URLs where rate dropped meaningfully OR pct_of_lp shifted substantially -->
+      <tr class="highlight-row">
+        <td>[page_url]</td>
+        <td>pre</td>
+        <td class="num">[n]</td>
+        <td class="num">[x%]</td>
+        <td class="num">[x%]</td>
+        <td class="num">[x%]</td>
+        <td class="num">[x%]</td>
+        <td class="num">[x%]</td>
+      </tr>
+      <tr class="highlight-row">
+        <td>[page_url]</td>
+        <td>post</td>
+        <td class="num">[n]</td>
+        <td class="num neg">[x%]</td>
+        <td class="num neg">[x%]</td>
+        <td class="num">[x%]</td>
+        <td class="num">[x%]</td>
+        <td class="num neg">[x%]</td>
+      </tr>
+      <!-- repeat for other majority-contributor URLs, pre and post rows paired -->
+    </tbody>
+  </table>
+
+  <p style="font-size:13px;color:#555;margin-top:12px;">
+    [State which URLs are majority contributors, whether the pattern is a routing shift or a rate change,
+     and what the finding implies for the DRI. For a routing story: name which channel or campaign
+     drives the gaining URL. For a performance story: name the specific URL and what may have changed
+     on that page (template, listed experiences, traffic composition from that entry point).]
+  </p>
+</div>
+```
+
+---
 
 ### Inventory section format
 
@@ -493,6 +576,7 @@ Do not show separate tables for dimensions that produced no signal. The ruled-ou
 | Table shows rates/shares with no user counts | Stakeholder can't judge if the finding is substantial — a 10pp drop on 30 users is noise |
 | Investigation-internal terminology in the report body (Step 1/2/3, Path A/B, Case A/B/C, "locus", "lost_checkouts_delta", "candidate TGIDs") | These are transcript terms — they mean nothing to a GM or stakeholder. Translate: "the three most-affected experiences" not "the Case B candidate TGIDs"; "supply checked and ruled out" not "Step 3 confirmed supply ruled out". |
 | Daily inventory time-series rendered as an HTML table | A 27-row × 4-column date table is unreadable at a glance. The daily time-series is always Plotly line charts. The only table in the inventory section is the TID snapshot summary. |
+| Standalone analysis block that restates a conclusion already shown in a prior block | If a sub-step breakdown (e.g., C2A/A2O) concludes the same thing as an experience mix table that came just before it, the sub-step block adds no new information. Fold the one new data point into the existing block's subtext paragraph and remove the standalone block. Every block in the report should add something the prior block didn't show. |
 
 ---
 
@@ -1367,3 +1451,7 @@ Plotly.newPlot('trend-90day', traces90d, {
 | c018 | 2026-05-07 | Three output-quality fixes from CE 6495 evaluation: (1) Inventory time-series — added "Omit non-informative buckets" rule: if a lead-time bucket is uniformly healthy across all experiences for the full post period, replace the chart with a single inline sentence rather than rendering an empty-signal chart. (2) LY data guard — changed behavior from replacing the chart div with a warning banner to always rendering the chart and inserting a visible amber ⚠️ badge after it; grey subtext is no longer an acceptable placement for the LY-absent notice. (3) Plotly conventions — added rule requiring color names in verdict lines, callouts, and subtext to be derived from the explicitly-assigned hex values in the chart's `colors` object, not inferred from Plotly default color order or trace position. |
 | c019 | 2026-05-07 | Inventory section redesigned for multi-TID accuracy and period-median summary tables: (1) TID selection for charts changed from hardcoded multi-TGID traces to contribution-based: one depleted TID → individual trace; multiple depleted TIDs within one TGID → aggregate into one trace; mixed → depleted only with healthy TIDs noted in disclosure banner; all healthy → aggregate all. For multiple TGIDs: one trace per TGID applying the same logic. (2) Yellow disclosure banner added — always rendered immediately before the 4 line charts. Amber style matching LY callout. States exactly which TIDs/data the charts cover, with single-TID, aggregated, mixed-exclusion, and multi-TGID text variants. (3) Path A table replaced: "current-state snapshot" (today's MAX extracted_date) replaced with "post-period median table" — columns renamed to Median 0–2d/3–7d/8–13d/14–30d; orange banner updated; highlight-row now signals near-zero post-period median, not today's state. (4) Path B table replaced: snapshot-based Pre/Post columns replaced with Pre Median / Post Median columns from the period-median queries. Plotly implementation simplified: scope-based traces (scope1/scope2) replace hardcoded tgid1/tgid2/tgid3. |
 | c020 | 2026-05-13 | Added "Hypotheses explored" block — always last in Section 3, after the ruled-out dimensions block (which is now second-to-last). Four-column table (Hypothesis · Test run · Outcome · What this means) with four outcome values: ✅ Confirmed, ❌ Ruled out, ⚠️ Data gap (name what would close it), 🔄 Consistent with — not directly tested (name what the direct test would be). Every hypothesis generated during the investigation must appear — confirmed, ruled out, and open alike. Forces honest documentation of data limits and untested inferences rather than allowing them to disappear into narrative subtext. |
+| c021 | 2026-05-14 | Section 1c "What broke?" expanded: (1) Added a multi-step example showing how to name all funnel steps with meaningful Shapley share in one sentence rather than picking one and ignoring the others. Two examples provided — one for multi-step same-mechanism case, one for multi-step different-mechanism case. (2) Added cross-reference note under "Why did it break?" requiring seasonal/event-based framing to be paired with a specific data signal, pointing to Styling guidelines rule 4. |
+| c022 | 2026-05-14 | Section 2 action card spec — added evidence threshold rule: before creating a standalone action card, verify both the rate drop and raw event count. Directional signals from small samples belong as a sub-bullet inside the most relevant existing card, not as a standalone card. Example sub-bullet wording provided. |
+| c023 | 2026-05-14 | Section 3 "What belongs in Section 3" — added fixed ordering for always-present blocks (numbered 1–8: mix cascade + Fixed Segment banner → Geo/Non-Geo → Shapley → daily trend → primary driver cuts → secondary driver evidence → ruled-out dimensions → hypotheses explored). Conditional blocks (inventory, session recordings, price) slot within primary driver evidence. Replaces the previous unordered table header which gave no sequencing signal. |
+| c024 | 2026-05-08 | Added "URL-level breakdown block" HTML pattern section, placed before the inventory section format. Fills the gap where the "What belongs in Section 3" table listed "URL-level breakdown" with no format spec. Two verdict forms: performance verdict (rate dropped, share held) and routing verdict (share shifted, rates held). Table columns: URL · Period · Users · % of LP · LP2S · S2C · C2O · CVR. `.highlight-row` on URLs where rate dropped meaningfully or `pct_of_lp` shifted substantially. Pointer to the dedicated URL breakdown query in `context.md` (not the canonical L2+ query — that query does not produce `pct_of_lp`). |

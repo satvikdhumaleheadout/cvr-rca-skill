@@ -235,6 +235,16 @@ checkout impact for) must appear as a named branch in the map. A branch may
 only be closed as CONFIRMED, RULED OUT, or DATA GAP — not left as a
 narrative observation or inline inference in a detail section.
 
+Note on depth vs completeness: the "every quantified signal needs a branch"
+rule is about map completeness — making sure the reader can see what was
+checked. It does not require deep investigation of every branch. If a
+quantified finding is below the 10% Shapley threshold or already explained by
+the same mechanism as a higher-priority branch, a one-line closure (e.g.,
+"same mechanism as C2O — CONFIRMED" or "A2O within-experience improvement:
+mechanism untested — DATA GAP") satisfies the completeness rule without
+requiring a full investigation branch. When in doubt: add the branch, write
+one line, close it with a status label.
+
 ---
 
 ### L0 — Orient from summary.json
@@ -489,6 +499,18 @@ Save to: `<run_dir>/findings.md`
 5. **Backlogged branches marked DATA GAP** — any branch whose evidence requires
    a backlogged source must be closed as `DATA GAP` in the tree map, not
    `CONFIRMED` or `LEAF` (see Backlogs section above).
+6. **Fixed segment reflected in analysis** — if you declared a fixed segment
+   (e.g., MB · Paid · Google Ads) at the end of the mix cascade, check that
+   L2+ queries actually apply those filters. If a broader cut was used as a
+   proxy (e.g., Paid MB instead of Google Ads), note that explicitly in the
+   transcript and confirm it's a reasonable approximation (e.g., Google Ads is
+   >80% of Paid volume). Don't leave a silent mismatch between the declared
+   segment and the data used.
+7. **Action cards reference accessible data** — if an action card asks a team to
+   investigate a specific period or data point, confirm that data is actually
+   reachable via analytics. If it falls outside the rolling window or a
+   backlogged table, note the limitation and name an alternative source (e.g.,
+   availability system logs, supplier contracts) so the DRI knows where to look.
 
 Once all open items are resolved or explicitly accepted, proceed to Step 3.
 

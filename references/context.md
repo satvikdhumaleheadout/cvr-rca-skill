@@ -623,6 +623,65 @@ ORDER BY 1, 2
 The two annotated lines are the fixed segment. Everything else is the same
 query regardless of which funnel step or dimension you are investigating.
 
+**URL breakdown query (dedicated — includes `pct_of_lp`)**
+
+Use this query when analysing landing page URLs. The `totals` CTE computes `pct_of_lp` — the share of CE LP traffic each URL represents per period. This is required to distinguish routing shifts (traffic moved between URLs) from performance shifts (a URL's own rate dropped). The canonical L2+ query does not produce `pct_of_lp` — do not substitute it for this query when URL analysis is needed. Apply all fixed segment filters from the cascade declaration.
+
+```sql
+WITH url_stats AS (
+
+    SELECT
+        page_url,
+        CASE
+            WHEN event_date BETWEEN '<PRE_START>' AND '<PRE_END>' THEN 'pre'
+            ELSE 'post'
+        END AS period,
+        COUNT(DISTINCT user_id)                                                                                    AS users_lp,
+        SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN has_select_page_viewed THEN user_id END), COUNT(DISTINCT user_id))   AS lp2s,
+        SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN has_checkout_started  THEN user_id END), COUNT(DISTINCT CASE WHEN has_select_page_viewed THEN user_id END)) AS s2c,
+        SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN has_order_completed   THEN user_id END), COUNT(DISTINCT CASE WHEN has_checkout_started  THEN user_id END)) AS c2o,
+        SAFE_DIVIDE(COUNT(DISTINCT CASE WHEN has_order_completed   THEN user_id END), COUNT(DISTINCT user_id))   AS cvr
+
+    FROM `headout-analytics.analytics_reporting.mixpanel_user_page_funnel_progression`
+
+    WHERE combined_entity_id = '<CE_ID>'
+      AND event_date BETWEEN '<PRE_START>' AND '<POST_END>'
+      AND (advertising_channel_type IS NULL
+           OR advertising_channel_type != 'PERFORMANCE_MAX')
+      AND is_microbrand_page = <TRUE|FALSE>  -- fixed from cascade Level 1
+      AND channel_name = '<channel>'         -- fixed from cascade Level 3
+
+    GROUP BY 1, 2
+
+),
+
+totals AS (
+
+    SELECT
+        period,
+        SUM(users_lp) AS total_lp
+
+    FROM url_stats
+    GROUP BY 1
+
+)
+
+SELECT
+    url_stats.page_url,
+    url_stats.period,
+    url_stats.users_lp,
+    ROUND(100.0 * url_stats.users_lp / totals.total_lp, 1) AS pct_of_lp,
+    url_stats.lp2s,
+    url_stats.s2c,
+    url_stats.c2o,
+    url_stats.cvr
+
+FROM url_stats
+INNER JOIN totals USING (period)
+
+ORDER BY url_stats.users_lp DESC, url_stats.period
+```
+
 ---
 
 ### `analytics_features.product_rankings_features`
@@ -1355,3 +1414,4 @@ thinking and makes the inference scannable.
 | c023 | 2026-05-07 | Fixed two inventory bugs identified from CE 189 post-mortem: (1) Wrong bridge table — all three inventory queries (Path A median, Path B median, daily time-series) previously used `dim_experiences → dim_tours` as the bridge. `dim_tours` has no `variant_status` column and returns Disabled TIDs. Changed bridge to `dim_experience_management WHERE variant_status = 'Active'` in all three `tgid_tours` CTEs. Updated join-path description accordingly. (2) Hard 30-day bucket ceiling — for products with long booking horizons (Vatican Museums, popular POIs), all experience_dates fall 60–90+ days out during the post period. Standard buckets (max 30d) return zeros that are indistinguishable from genuine sell-out. Added "Booking-horizon pre-check" section before Path A: run a lead-time range query (min/max/median lead time); if `min_lead_time > 30`, extend bucket boundaries to match the actual horizon (0–14d, 15–30d, 31–60d, 61–90d, 91+d); note the adjustment in transcript and report. |
 | c024 | 2026-05-08 | Removed "Booking-horizon pre-check" section added in c023. Post-mortem review confirmed the motivating example (Vatican Museums as a 60–90 day horizon product) was factually wrong — CE 189 is a standard short/medium horizon product and the zeros in both periods were genuine stable zeros, not a window mismatch. The pre-check also adds no analytical value: if a product genuinely had all experience_dates beyond 30 days, both pre and post would show zeros, and the existing "flat and stable → supply ruled out" interpretation already gives the correct conclusion without a separate pre-check query. |
 | c025 | 2026-05-13 | Added usage note to the L2+ canonical query pattern for `page_url` as dimension: sort output by `users_lp DESC` (not alphabetically) to surface majority-contributor URLs first; long-tail URLs produce high-variance rate estimates and should be treated as directional only. |
+| c026 | 2026-05-08 | Added dedicated URL breakdown query immediately after the canonical L2+ query pattern. The new query adds a `totals` CTE that computes `pct_of_lp` (each URL's share of CE LP traffic per period). This metric is required to distinguish routing shifts (traffic moved between URLs, rates held) from performance shifts (a URL's own rate dropped, share held). The canonical L2+ query cannot answer the routing question — without `pct_of_lp`, Claude would have to construct the totals CTE on the fly, which is the class of error the insights report flagged. The URL breakdown query carries all fixed segment filters from the cascade declaration and sorts by `users_lp DESC`. |
