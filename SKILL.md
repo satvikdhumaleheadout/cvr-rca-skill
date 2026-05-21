@@ -160,6 +160,33 @@ Mixpanel MCP calls.
 Read `summary.json`. Then run the investigation as a tree: orient at L0 using
 everything that is already computed, open branches at L1, descend to a leaf.
 
+### Slack context — fire and forget
+
+Before reading any data, spawn the Slack context sub-agent. Pass it the values
+below (all available from `summary.json`), then continue immediately — do not
+wait for it to return. You will read its output at Step 2b check #9, not before.
+
+```
+Sub-agent instruction file: "$SKILL_DIR/references/slack_context_guide.md"
+
+Pass:
+  ce_id       → meta.ce_id
+  ce_name     → meta.combined_entity_name
+  market      → meta.market
+  country     → meta.country
+  pre_start   → pre-period start date
+  post_start  → post-period start date
+  post_end    → post-period end date
+  run_dir     → <run_dir>
+  output_path → <run_dir>/slack_context.md
+```
+
+The sub-agent runs entirely in the background. It has no access to the
+investigation and forms no hypotheses. Its only job is to collect and categorise
+Slack signals into `<run_dir>/slack_context.md`.
+
+---
+
 ### Start the investigation transcript
 
 Before reading the data, open the transcript file. The run directory was
@@ -559,6 +586,30 @@ Save to: `<run_dir>/findings.md`
    for the trigger rule and `context.md → "Cross-cut query template"` for the
    query.
 
+9. **Slack context reconciliation** — read `<run_dir>/slack_context.md`. If the
+   file does not exist yet, wait briefly (the sub-agent may still be running);
+   if still missing after a short wait, log "Slack context unavailable — skipped"
+   and proceed. For each signal in the file, do exactly one of three things:
+
+   **Corroborate** — the signal directly names the same mechanism, TGID, date,
+   or segment as a finding already in findings.md. Add the Slack thread link to
+   the Source column of the evidence inventory row it supports. Format:
+   `[Author · date](slack-link)`.
+
+   **Test a gap** — the signal names a specific causal mechanism, TGID, date, or
+   operational event that the investigation did not address. Only pursue if it
+   passes all three filters: (a) specific — names a date, mechanism, or TGID,
+   not just "things are slow"; (b) within the investigation window or causally
+   upstream of it; (c) about this CE or its market category, not generic
+   commentary. If it passes: run one query, update the tree map as CONFIRMED /
+   RULED OUT / DATA GAP, update findings.md if the finding changes. Maximum one
+   query per gap signal.
+
+   **Reject** — the signal does not pass the gap filters, or only confirms the
+   symptom ("CVR is down", "bookings dropped"). Write one line in the transcript:
+   "Slack signal '[summary]' — not pursued: [reason in 5 words]." Do not
+   include rejected signals in the report.
+
 Once all open items are resolved or explicitly accepted, proceed to Step 3.
 
 ---
@@ -687,4 +738,5 @@ not generic "investigate further" text.
 | c024 | 2026-05-14 | Backlogs — added DATA GAP closure rule: when a branch's primary evidence path leads to a backlogged source, close the branch as DATA GAP in the tree map (not CONFIRMED or LEAF), and cite the relevant `actions.md` root cause in the action card so the DRI receives specific starting steps rather than generic "investigate further" text. |
 | c025 | 2026-05-14 | Step 2b "Specific checks before proceeding" rewritten as a numbered 5-item checklist: (1) weekday composition, (2) seasonal/calendar event claims must be paired with a data signal (cross-reference to report_structure.md Styling rule 4), (3) every number has a named source, (4) every numeric recommendation verified with arithmetic, (5) backlogged branches must be closed as DATA GAP. Replaces the previous unordered prose list. |
 | c026 | 2026-05-20 | Cross-cut concept added as a first-class investigation step. hypothesis.md gains "Dimension cross-cut — when two cuts both concentrate" section with a trigger rule (≥8pp absolute or ≥20% relative), enumerated common cross-cuts by funnel step (A2O, S2C, LP2S, C2A), and a three-outcome interpretation guide. context.md gains "Cross-cut query template" section with the generic 2-dimension query, a funnel step substitution table, and a worked A2O example (device_type × experience_id). SKILL.md gains check 8 in Step 2b: "Cross-cut run when two cuts both concentrated." |
+| c028 | 2026-05-21 | Slack context layer added. A fire-and-forget sub-agent is spawned at the top of Step 2 (after summary.json is read, before the investigation starts). It runs three searches — CE-specific global (pre_start − 14 days → post_end), market channel read (pre_start → post_end), and #tf-bugalert (post_start − 2 days → post_end) — and writes categorised signals to `<run_dir>/slack_context.md` in four buckets: Platform/Bug, Supply/Inventory, Campaign/Traffic, CE-specific mentions. The main agent never waits for it. Step 2b gains check #9 (Slack context reconciliation): read slack_context.md after findings.md is written; corroborate confirmed findings with thread links, test specific gap signals with one query max, reject vague or symptom-only signals explicitly. report_structure.md gains optional 5th "Source" column in hypotheses explored table (only rendered when a corroboration exists) and inline citation format for analysis block subtext. Sub-agent instruction set lives in `references/slack_context_guide.md`. |
 | c027 | 2026-05-21 | First-pass batch parallelised via sub-agents. "Run all branches within a level in parallel" replaced with a five-step spawning protocol: (1) write SQL for every cut before spawning, (2) open transcript section, (3) spawn one sub-agent per cut — each receives only SQL + output path + output contract (no reference files, context isolation enforced), (4) wait for all sub-agents before reading any result, (5) fill transcript and synthesise from the combined picture. Batch JSON files saved to `<run_dir>/batch_<cut_name>.json`. Failure handling: missing or empty JSON = DATA PULL FAILURE, log and continue, do not re-query inline. Applies to the first-pass branch set only; deeper levels (L2, L3) remain sequential. |

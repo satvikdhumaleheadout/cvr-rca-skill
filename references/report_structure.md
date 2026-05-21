@@ -1283,6 +1283,40 @@ reached a data boundary; it invites the stakeholder to pick it up.
 </div>
 ```
 
+**Optional Slack source column:** If Step 2b check #9 produced at least one
+Slack corroboration, add a 5th column `Source` to the table. Each cell is either
+empty or a formatted thread link: `[Author · date](slack-link)`. If no
+corroborations exist, omit the column entirely — do not add an empty column.
+
+```html
+<!-- With Slack source column (only when at least one row has a citation) -->
+<tr>
+  <th>Hypothesis</th>
+  <th>Test run</th>
+  <th class="num" style="width:100px;">Outcome</th>
+  <th>What this means</th>
+  <th style="width:120px;">Source</th>
+</tr>
+<!-- Cell example with citation: -->
+<td><a href="https://headout.slack.com/archives/CNSHDD2H1/p1746123456789012"
+    target="_blank" style="color:#3a4a8a;font-size:12px;">Rawia · Apr 8</a></td>
+<!-- Cell example without citation: -->
+<td></td>
+```
+
+**Inline Slack corroboration in analysis block subtext:** If a Slack thread
+directly and independently confirms a finding stated in an analysis block verdict
+(not just echoes it), add a parenthetical citation after the verdict sentence:
+
+```
+(corroborated: [Author · date in #channel](slack-link))
+```
+
+Use this sparingly — only when the Slack signal adds independent confirmation
+beyond what the data alone shows. Never add a Slack citation just because a GM
+mentioned that performance was poor; only when they named a specific mechanism,
+date, or event that matches the finding.
+
 ---
 
 ### Plotly chart conventions
