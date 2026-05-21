@@ -684,6 +684,85 @@ ORDER BY url_stats.users_lp DESC, url_stats.period
 
 ---
 
+### Cross-cut query template
+
+Use when two dimension cuts for the same funnel metric both concentrate and you need to confirm whether they describe the same users (one root cause) or independent pools (two root causes). See `hypothesis.md → "Dimension cross-cut"` for the trigger rule.
+
+Replace `<DIM_1>` and `<DIM_2>` with the two concentrating dimensions (e.g., `device_type` and `experience_id`). Replace the numerator and denominator CASE expressions with the funnel step of interest. Apply all fixed segment filters from the cascade declaration.
+
+```sql
+SELECT
+    <DIM_1>,
+    <DIM_2>,
+    CASE
+        WHEN event_date BETWEEN '<PRE_START>' AND '<PRE_END>' THEN 'pre'
+        ELSE 'post'
+    END AS period,
+    COUNT(DISTINCT CASE WHEN <DENOMINATOR_FLAG> THEN user_id END)  AS users_denom,
+    COUNT(DISTINCT CASE WHEN <NUMERATOR_FLAG>   THEN user_id END)  AS users_numer,
+    SAFE_DIVIDE(
+        COUNT(DISTINCT CASE WHEN <NUMERATOR_FLAG>   THEN user_id END),
+        COUNT(DISTINCT CASE WHEN <DENOMINATOR_FLAG> THEN user_id END)
+    )                                                              AS rate
+
+FROM `headout-analytics.analytics_reporting.mixpanel_user_page_funnel_progression`
+
+WHERE combined_entity_id = '<CE_ID>'
+  AND event_date BETWEEN '<PRE_START>' AND '<POST_END>'
+  AND (advertising_channel_type IS NULL
+       OR advertising_channel_type != 'PERFORMANCE_MAX')
+  AND is_microbrand_page = <TRUE|FALSE>     -- fixed from cascade Level 1
+  AND channel_name = '<channel>'            -- fixed from cascade Level 3
+
+GROUP BY 1, 2, 3
+ORDER BY users_denom DESC, 1, 2, 3
+```
+
+**Funnel step substitutions** (replace `<DENOMINATOR_FLAG>` / `<NUMERATOR_FLAG>`):
+
+| Step | Denominator flag | Numerator flag |
+|------|-----------------|----------------|
+| LP2S | *(omit — COUNT all users)* | `has_select_page_viewed` |
+| S2C | `has_select_page_viewed` | `has_checkout_started` |
+| C2A | `has_checkout_started` | `has_order_attempted` |
+| A2O | `has_order_attempted` | `has_order_completed` |
+| C2O | `has_checkout_started` | `has_order_completed` |
+
+**Worked example — A2O by `device_type × experience_id`:**
+
+```sql
+SELECT
+    device_type,
+    experience_id,
+    CASE
+        WHEN event_date BETWEEN '<PRE_START>' AND '<PRE_END>' THEN 'pre'
+        ELSE 'post'
+    END AS period,
+    COUNT(DISTINCT CASE WHEN has_order_attempted THEN user_id END)  AS users_attempted,
+    COUNT(DISTINCT CASE WHEN has_order_completed THEN user_id END)  AS users_completed,
+    SAFE_DIVIDE(
+        COUNT(DISTINCT CASE WHEN has_order_completed THEN user_id END),
+        COUNT(DISTINCT CASE WHEN has_order_attempted THEN user_id END)
+    )                                                               AS a2o
+
+FROM `headout-analytics.analytics_reporting.mixpanel_user_page_funnel_progression`
+
+WHERE combined_entity_id = '<CE_ID>'
+  AND event_date BETWEEN '<PRE_START>' AND '<POST_END>'
+  AND (advertising_channel_type IS NULL
+       OR advertising_channel_type != 'PERFORMANCE_MAX')
+  AND is_microbrand_page = <TRUE|FALSE>
+  AND channel_name = '<channel>'
+  AND experience_id IS NOT NULL             -- only users who reached select page
+
+GROUP BY 1, 2, 3
+ORDER BY users_attempted DESC, 1, 2, 3
+```
+
+**Note on `experience_id` availability:** `experience_id` is NULL until the user reaches the select page. For A2O and C2A cross-cuts (denominator is `has_order_attempted` or `has_checkout_started`), experience_id is reliably populated. For LP2S cross-cuts that include `experience_id`, the denominator is already scoped to `has_select_page_viewed` users, so experience_id is set for all counted rows.
+
+---
+
 ### `analytics_features.product_rankings_features`
 
 **What it is:** Daily feature data for the product ranking algorithm. Used in

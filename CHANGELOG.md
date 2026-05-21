@@ -35,9 +35,9 @@ This file tracks every meaningful change pushed to this repository. Each entry c
 ### Test runs
 
 Three new runs added (`v1.9`):
-- **ce189_2026-04-09_2026-05-06** (Vatican Museums) — TBD/35
-- **ce2330_2026-03-13_2026-05-12_run2** (Walt Disney World Orlando) — TBD/35
-- **ce6495_2026-03-13_2026-05-12** (Kualoa Ranch) — TBD/35
+- **ce189_2026-04-09_2026-05-06** (Vatican Museums) — 31/35. Post-Easter seasonal composition shift confirmed as root cause; supply definitively ruled out (both limited-capacity TIDs show zero tickets in both pre and post periods). Remaining gaps: daily trend charts not filtered to fixed segment; no controlled comparison excluding Italian national holidays.
+- **ce2330_2026-03-13_2026-05-12_run2** (Walt Disney World Orlando) — 28/35. Dual-driver: spring break → off-season demand shift (primary) + Magic Kingdom A2O failure for experience 36344 (secondary, DATA GAP pending order_attempted_events_v2). Run 2 closes all three execution errors from Run 1. Remaining gaps: Fixed Segment banner not rendered as standalone HTML component; cross-cut (Android Mweb × experience × A2O) not run.
+- **ce6495_2026-03-13_2026-05-12** (Kualoa Ranch) — 27/35. Near-term inventory depletion of UTV Raptor Tour (TID 80074) confirmed as root cause via Jurassic Zipline inverse confirmation. Main gap: C2O branch not opened despite 22% Shapley share.
 
 ---
 

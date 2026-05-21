@@ -321,6 +321,41 @@ For each primary driver type, the URL breakdown answers a different question:
 
 ---
 
+## Dimension cross-cut — when two cuts both concentrate
+
+A cross-cut is not about adding more dimensions — it is about avoiding a double-counting error. When two independent dimension cuts for the same funnel metric both show concentration, they may be describing the same users, not two independent findings. Run the intersection before reporting both as separate root causes.
+
+**Trigger rule:** When two dimension cuts for the same funnel metric both show a concentrated drop (≥8pp absolute or ≥20% relative in the leading segment), run the cross-cut before closing either branch as a leaf. If the concentrations overlap substantially (one cell dominates), the cross-cut becomes the leaf — not the two individual cuts. If they are independent (multiple distinct cells show drops), both findings hold and can be reported separately.
+
+**Threshold rationale:** 8pp absolute or 20% relative is roughly the point at which a dimension cut is large enough to explain the majority of a CE-level metric change. Below that threshold, the finding is directional — a cross-cut is useful but not required.
+
+### Common cross-cuts by funnel step
+
+Use the cross-cut query template in `context.md → "Cross-cut query template"` for any of these:
+
+**A2O (order success rate):**
+- `device_type × experience_id` — did one device type fail specifically on one experience, or did all devices fail on that experience equally?
+- `channel_name × experience_id` — did payment failures concentrate in users from a specific channel arriving at a specific experience simultaneously?
+
+**S2C (select-to-checkout rate):**
+- `device_type × experience_id` — did mobile users specifically abandon one experience's date picker, or did all devices abandon it equally?
+- `language × experience_id` — did a localised audience specifically not proceed past a particular experience's variant selection?
+
+**LP2S (landing-to-select rate):**
+- `device_type × page_url` — did mobile users specifically not engage on certain URLs, or was it all devices on those URLs?
+- `language × page_url` — did a language-specific audience specifically drop on certain landing pages?
+
+**C2A (checkout-to-attempt rate):**
+- `device_type × experience_id` — did mobile users specifically not submit payment on a particular experience?
+
+### Interpretation
+
+- **Concentrations overlap (one cell dominates):** The two individual dimension findings describe the same users. Report the cross-cut cell as the leaf (e.g., "Android Mweb users on experience 36344"), not two separate findings. This is one root cause.
+- **Concentrations are independent (multiple distinct cells show drops):** The two mechanisms are genuinely separate pools. Report both, and note they were confirmed as non-overlapping via the cross-cut.
+- **One cell is too thin (< ~20 post-period users in the denominator):** Data is insufficient to confirm or deny overlap. Note the ambiguity in the report; do not assert independence.
+
+---
+
 ## Historical patterns — mechanism detail by scenario
 
 Use these once a first-pass branch confirms. They provide the specific mechanism hypotheses for each confirmed scenario — the "why" behind a confirmed dimension signal.

@@ -361,8 +361,49 @@ are. The branches are not written upfront as a fixed list; they grow level by
 level from what the data actually shows. Consult `hypothesis.md` for historical
 priors, but don't treat any list as a ceiling.
 
-Run all branches within a level in parallel — one query batch, results read
-together.
+**First-pass batch — parallel sub-agents**
+
+The first-pass branch set (from `hypothesis.md` for the primary funnel step) is
+the only level that runs in parallel via sub-agents. Deeper levels (L2, L3) are
+sequential — each builds on what the level above found.
+
+**Step 1 — Write SQL for every cut first.** Before spawning anything, write the
+complete SQL for each cut in the first-pass set. Substitute the fixed segment
+filters, `ce_id`, and date ranges into every query now. Sub-agents receive
+finished SQL — they do not modify it.
+
+**Step 2 — Open the transcript section.** Write `## L2 — First-pass batch
+(parallel)` in `transcript.md`. List each cut name and its SQL. Leave the result
+field blank — it will be filled after the batch completes.
+
+**Step 3 — Spawn one sub-agent per cut in a single parallel batch.** Each
+sub-agent receives exactly three things:
+
+- The complete SQL (verbatim)
+- Output path: `<run_dir>/batch_<cut_name>.json`
+- Output contract: *"Run this query with `bq query --use_legacy_sql=false
+  --format=json --quiet --project_id=headout-analytics`. Write the raw JSON
+  output to the output path. Return exactly one line:
+  `<cut_name>: <pre_rate>% → <post_rate>% (±Xpp), N post-period sessions`."*
+
+Pass nothing else — no SKILL.md, no context.md, no hypothesis.md. Sub-agents
+are query runners. Passing reference files causes them to reason about the
+investigation instead of executing the query, which contaminates the synthesis
+the main agent does in Step 5.
+
+**Step 4 — Wait for all sub-agents to complete** before reading any result.
+Do not act on partial results. The synthesis in Step 5 requires the full picture.
+
+**Step 5 — Fill in transcript and synthesise.** Copy each sub-agent's one-liner
+into the transcript section. Then write the hypothesis synthesis from the
+combined picture — not from each result in isolation. Read the full
+`batch_<cut_name>.json` for any cut you plan to descend into.
+
+**Batch failure handling:** If a sub-agent returns no file or an empty JSON,
+log it as a DATA PULL FAILURE in the transcript (same format as the "Data pull
+errors" section above) and continue with the remaining results. Do not re-run the
+query inline. Adjust confidence language for any branch where the missing cut
+was material.
 
 Each result either:
 - **Confirms** → descend: open a child branch that tests the mechanism more
@@ -511,6 +552,12 @@ Save to: `<run_dir>/findings.md`
    reachable via analytics. If it falls outside the rolling window or a
    backlogged table, note the limitation and name an alternative source (e.g.,
    availability system logs, supplier contracts) so the DRI knows where to look.
+8. **Cross-cut run when two cuts both concentrated** — if two dimension cuts for
+   the same funnel metric both showed a concentrated drop (≥8pp absolute or
+   ≥20% relative), confirm the intersection query was run before both were
+   reported as independent findings. See `hypothesis.md → "Dimension cross-cut"`
+   for the trigger rule and `context.md → "Cross-cut query template"` for the
+   query.
 
 Once all open items are resolved or explicitly accepted, proceed to Step 3.
 
@@ -639,3 +686,5 @@ not generic "investigate further" text.
 | c023 | 2026-05-14 | Secondary funnel step coverage fix: (1) Signal 2 (Shapley) now explicitly states that Shapley deltas are quantified signals and count toward the closing coverage requirement — closes the gap where a secondary step above the ~10% threshold was noted but never tested. (2) L2+ opening changed from "primary funnel step only" to "primary funnel step first" — removes the prohibition that prevented secondary branches from opening. (3) L2+ closing paragraph gains a secondary-step scoping note: the question for a secondary step is "independent mechanism or explained by primary?" not "what broke and why?"; one decomposition query is usually sufficient; only descend further if the secondary step declines within the fixed segment in a direction not explained by the primary finding; close as DATA GAP if daily volume is too low to be reliable (<~20 events/day average). This keeps secondary checks proportional — a dominant single-driver CE does not spin off unnecessary branches. |
 | c024 | 2026-05-14 | Backlogs — added DATA GAP closure rule: when a branch's primary evidence path leads to a backlogged source, close the branch as DATA GAP in the tree map (not CONFIRMED or LEAF), and cite the relevant `actions.md` root cause in the action card so the DRI receives specific starting steps rather than generic "investigate further" text. |
 | c025 | 2026-05-14 | Step 2b "Specific checks before proceeding" rewritten as a numbered 5-item checklist: (1) weekday composition, (2) seasonal/calendar event claims must be paired with a data signal (cross-reference to report_structure.md Styling rule 4), (3) every number has a named source, (4) every numeric recommendation verified with arithmetic, (5) backlogged branches must be closed as DATA GAP. Replaces the previous unordered prose list. |
+| c026 | 2026-05-20 | Cross-cut concept added as a first-class investigation step. hypothesis.md gains "Dimension cross-cut — when two cuts both concentrate" section with a trigger rule (≥8pp absolute or ≥20% relative), enumerated common cross-cuts by funnel step (A2O, S2C, LP2S, C2A), and a three-outcome interpretation guide. context.md gains "Cross-cut query template" section with the generic 2-dimension query, a funnel step substitution table, and a worked A2O example (device_type × experience_id). SKILL.md gains check 8 in Step 2b: "Cross-cut run when two cuts both concentrated." |
+| c027 | 2026-05-21 | First-pass batch parallelised via sub-agents. "Run all branches within a level in parallel" replaced with a five-step spawning protocol: (1) write SQL for every cut before spawning, (2) open transcript section, (3) spawn one sub-agent per cut — each receives only SQL + output path + output contract (no reference files, context isolation enforced), (4) wait for all sub-agents before reading any result, (5) fill transcript and synthesise from the combined picture. Batch JSON files saved to `<run_dir>/batch_<cut_name>.json`. Failure handling: missing or empty JSON = DATA PULL FAILURE, log and continue, do not re-query inline. Applies to the first-pass branch set only; deeper levels (L2, L3) remain sequential. |
