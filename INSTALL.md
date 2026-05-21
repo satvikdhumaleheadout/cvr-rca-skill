@@ -68,7 +68,7 @@ Read the skill file at: ~/.cvr-rca/SKILL.md
 EOF
 ```
 
-Tell the user: "Registered the `/cvr-rca` command with Claude Code."
+Tell the user: "Registered (or refreshed) the `/cvr-rca` command with Claude Code."
 
 ---
 
@@ -89,16 +89,15 @@ where analysis outputs will land."
 cat ~/.cvr-rca/VERSION
 ```
 
-Tell the user the installed version, then give this summary:
+Tell the user the installed version. If this was a fresh install say "installed successfully", if it was an update say "updated successfully". Summary:
 
-> **CVR-RCA v[VERSION] installed successfully.**
+> **CVR-RCA v[VERSION] installed/updated successfully.**
 >
 > - Skill files: `~/.cvr-rca/`
 > - Command registered: `/cvr-rca`
 > - Runs folder: `~/Documents/CVR RCA Runs/`
 >
-> **Restart Claude Code** (quit and reopen) for the `/cvr-rca` command to
-> appear in the picker.
+> **Restart Claude Code** (quit and reopen) for the changes to take effect.
 >
 > ---
 >
