@@ -4,6 +4,29 @@ This file tracks every meaningful change pushed to this repository. Each entry c
 
 ---
 
+## [v1.10] — 2026-05-21 — Parallel first-pass batch, cross-cut investigation, inventory/completeness improvements
+
+**Summary:** Three sets of changes bundled together. (1) First-pass branch set now runs via parallel sub-agents — each sub-agent receives only the SQL, an output path, and an explicit output contract (no reference files), enforcing context isolation. Main agent writes all SQL before spawning, waits for the full batch, then synthesises from the combined picture. Batch JSONs saved to `<run_dir>/batch_<cut_name>.json`. (2) Cross-cut added as a first-class investigation step with a formal trigger rule (≥8pp absolute or ≥20% relative), enumerated cross-cuts by funnel step, and a generic 2-dimension query template in `context.md`. (3) Inventory queries overhauled: period-median queries (APPROX_QUANTILES) replace single-date snapshots, bridge table fixed to `dim_experience_management WHERE variant_status = 'Active'`, time-series interpretation rewritten with trend-based classification, multi-TGID verdict patterns added to `report_structure.md`. Investigation completeness rules tightened across SKILL.md c022–c027.
+
+### Changes by file
+
+**`SKILL.md`** — c027
+- "Run all branches within a level in parallel" replaced with a five-step spawning protocol. Each sub-agent receives exactly: complete SQL, output path (`<run_dir>/batch_<cut_name>.json`), and output contract. No reference files passed — context isolation enforced. Main agent waits for all results before synthesising. Transcript section opened before spawning, results filled after batch completes. Failure handling: missing JSON = DATA PULL FAILURE, log and continue, do not re-query inline. Applies to first-pass branch set only; deeper levels remain sequential.
+
+**`references/context.md`**
+- Cross-cut query template: generic 2-dimension query, funnel step substitution table, worked A2O example (`device_type × experience_id`).
+- Inventory period-median queries (APPROX_QUANTILES across all extracted_dates in window) replace single-date snapshots.
+- Bridge table fixed from `dim_tours` to `dim_experience_management WHERE variant_status = 'Active'`.
+- Time-series interpretation guide rewritten: trend-based classification (sustained depression, onset event, gradual decline, episodic dips). Artifact detection rule for synchronised zeros.
+
+**`references/hypothesis.md`**
+- Cross-cut section: trigger rule (≥8pp absolute or ≥20% relative), common cross-cuts by funnel step (A2O, S2C, LP2S, C2A), three-outcome interpretation guide.
+- TGID selection simplified to judgment-based language (removed rigid Case A/B/C).
+- TID scoping rule: single depleted TID → individual scope; multiple depleted → TGID aggregate; mixed → depleted only.
+- Inventory jargon firewall note added before inventory sequence.
+
+---
+
 ## [v1.9] — 2026-05-20 — URL breakdown query, S2C secondary-driver scoping, Section 3 ordering, action card quality gates
 
 **Summary:** Five connected quality upgrades, most motivated by gaps identified in recent CE 2330 and CE 189 evaluations. A dedicated URL breakdown query (`pct_of_lp` CTE) is added to `context.md` and wired into `hypothesis.md` and `report_structure.md` — replacing the canonical L2+ query wherever URL routing vs performance disambiguation is needed. `hypothesis.md` gains a secondary-driver scoping block for S2C (prevents unnecessary first-pass branches when S2C is not the primary driver) and a C2O experience-routing follow-up sequence. `report_structure.md` gains a fixed Section 3 ordering, a URL-level breakdown HTML block, an action card evidence threshold rule, and multi-step "What broke?" examples. `actions.md` gains a DATA GAP template for the RC9 unresolved A2O mechanism case. `SKILL.md` gains two new findings-gate items: fixed-segment reflection check and action card data-accessibility check.
