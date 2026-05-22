@@ -4,6 +4,66 @@ This file tracks every meaningful change pushed to this repository. Each entry c
 
 ---
 
+## [v1.12] — 2026-05-22 — Bidirectional RCA support, four-pattern Slack reconciliation, link-to-table styling, jargon preservation
+
+**Summary:** Largest skill release since v1.0. Three connected expansions land together. **(1) Bidirectional RCA support** — the skill now treats CVR improvements as first-class investigations alongside declines. New "Improvement direction" first-pass branch sets in `hypothesis.md` (LP2S / S2C / C2O / Mix in the positive direction). New bidirectional Pattern 11 (Catalogue change — TGID launch, disablement, restructure) with data-driven trigger and query template in `context.md`. New "Improvement direction — action templates" library in `actions.md`: **Protect** / **Extend** / **Investigate-headwind** sub-templates with starter actions and DRIs. Report-structure spec gains improvement-case headwind magnitude threshold (<~10% of ΔCVR → fold into sub-bullet), sign-aware Shapley flex bar for mixed contributions, and direction-aware scoring guidance in the evaluator. Decline path is preserved and strengthened — no decline behaviour is weakened by the bidirectional work; cross-cut trigger rule rephrased to "concentrated movement (in either direction)" with identical threshold. **(2) Four-pattern Slack reconciliation model** — Step 2b check #9 rewritten. Every signal classifies into Pattern A (direct corroboration), B (mechanism explanation), C (reframing context), D (testable gap), or Reject. Each pattern routes to a specific surface in the report: A elevates Section 3 verdict subtext citations (decline-specific), B drives Layer 1 narrative weaving + Market Context block, C drives Layer 2 Important Context callout-item + Market Context block, D triggers a one-query test with `(prompted by Author · date ↗)` citation. Mandatory timeframe-citation rule for different-period Slack metrics. One-citation-per-concept rule. Reaffirms that Slack is consulted **only** at Step 2b — never during L0/L1/L2 — the fire-and-forget pattern is deliberate. New "Slack signal classification" reference table in `hypothesis.md`. High-value gap categories listed for Pattern D (assortment changes, pricing levers, content updates, supplier changes, catalogue events). **(3) Link-to-table styling + jargon preservation.** Every Section 3 analysis block now carries an `id` attribute; canonical anchor ID convention listed in `report_structure.md`. New `.ref-link` CSS (small ↗ icon, blue-grey, smooth scroll, `:target` highlight). ↗ used in Section 1 callout, Section 2 action cards, Hypotheses Explored "Test run" column — never inside Section 3 verdict lines or subtexts. Citation format split: bare `↗` for internal navigation, `Source · date ↗` for Slack citations. New styling rule 5: preserve Headout-native jargon (WBR, SP, GBV, RR vs plan, TGID, TID, VID, CR%, FabriGPT, MB / HO, LP2S, S2C, C2A, A2O, C2O) — paraphrasing reduces stakeholder trust by hiding the source. Does not override the existing investigation-internal-labels-translated rule. **(4) Step 4 footer hardened** — the two output lines (`Evaluation → …` and `[Total X/35] · …`) are the only chat output at end of run. No narrative summary, no Slack recap, no highlights block. **(5) Same-period vs different-period data boundary** documented in `context.md` to prevent fabricated YoY figures while allowing external reframing context.
+
+### Changes by file
+
+**`SKILL.md`** — c029
+- Step 2b check #9 rewritten with four-pattern classification (A/B/C/D) + Reject. Explicit reaffirmation that Slack is consulted only at this point.
+- Pattern A on declines: citation-elevation rule for DRI-bound actions.
+- Pattern C: timeframe-citation rule made mandatory when Slack timeframe ≠ pre/post.
+- Pattern D: high-value gap categories listed (assortment changes, pricing levers, content updates, supplier changes, catalogue events).
+- One citation per concept rule added.
+- Step 4 footer hardened — two output lines are the *only* chat output.
+- Session recordings rule extended to improvement loci (decline = look for failure; improvement = verify smooth flow + surface new UI).
+- L2+ section gains direction-sensitive language and pointer to `hypothesis.md → "Improvement direction"` when CVR improved.
+- Catalogue change called out as a first-class data-driven hypothesis.
+
+**`references/report_structure.md`** — c025
+- New "Slack integration & link-to-table styling" section: three-layer model, four-pattern cross-reference table, timeframe-citation rule, Slack-corroboration-upgrades-evidence rule, ↗ link-to-table pattern with usage and citation-format-split rules.
+- New Styling rule 5: preserve Headout-native jargon (does not override rule 1).
+- Section 1c gains magnitude threshold for "What's holding it back" (improvement variant).
+- Section 2 gains improvement-direction action card sub-spec (Protect / Extend / Investigate-headwind).
+- Section 3 ordering adds item 6.5 Market Context (conditional).
+- New "Market context & operational signals" HTML block spec.
+- Shapley block gains sign-aware flex bar rule.
+- Visual Spec gains `.ref-link` CSS, scroll-behavior, `.analysis-block:target` highlight.
+- New "Anchor ID convention" section listing canonical IDs.
+- "What belongs in Section 3" table gains rows for Weekday composition and Market Context.
+
+**`references/hypothesis.md`** — c018
+- Cross-cut trigger rule rephrased to "concentrated movement (in either direction)" — same threshold, broader language.
+- New "Improvement direction — first-pass branches" section: LP2S/S2C/C2O/Mix in positive direction.
+- New "Pattern 11: Catalogue change (bidirectional)" — TGID launch, disablement, restructure as first-class hypothesis.
+- New "Slack signal classification" reference table — four patterns + Reject, with high-value gap categories for Pattern D.
+
+**`references/context.md`** — c027
+- New "Catalogue change" query section: `dim_experience_management` first-appearance scan (authoritative) plus `product_rankings_features` fallback. Data-driven trigger, no Slack input required.
+- New "Same-period vs different-period external metrics" section: prevents fabricated YoY figures while allowing external reframing context via the Layer-1 Slack citation format.
+
+**`references/actions.md`** — c005
+- New Root Cause 11: Catalogue change (bidirectional decline/improvement actions).
+- New "Improvement direction — action templates" library: Protect, Extend, Investigate-headwind sub-templates.
+- New "Slack-corroboration upgrade on decline actions" rule.
+
+**`evals/evaluator.md`**
+- New "Direction-aware scoring note" — semantic translation guide for improvement RCAs.
+- Theme 3 (Investigation Effort) gains structural-delta-based depth calibration: shallow investigation is correct for small structural deltas (<+0.15pp).
+
+**`templates/report.html`**
+- `.ref-link` CSS added to the shared template, with usage guidance comment.
+- `html { scroll-behavior: smooth }` and `.analysis-block:target` highlight added.
+
+---
+
+## [v1.11] — 2026-05-21 — Slack context layer (retroactive entry)
+
+**Summary:** Added Slack context layer to the investigation. A fire-and-forget sub-agent is spawned at the top of Step 2 (after `summary.json` is read, before the data-driven investigation starts) and runs three searches: CE-specific global (pre_start − 14 days → post_end), market channel read (pre_start → post_end), and #tf-bugalert (post_start − 2 days → post_end). Output written to `<run_dir>/slack_context.md` in four buckets: Platform/Bug, Supply/Inventory, Campaign/Traffic, CE-specific mentions. The main agent never waits for it — Slack is consulted only at Step 2b. Step 2b gains check #9 (Slack context reconciliation) with corroborate / test gap / reject classification. `report_structure.md` gains optional 5th "Source" column in hypotheses explored table and inline citation format. Sub-agent instruction set lives in `references/slack_context_guide.md`. *(This entry was missed when the v1.11 commit was pushed on 2026-05-21; added retroactively for completeness — see SKILL.md c028 for full file-level detail.)*
+
+---
+
 ## [v1.10] — 2026-05-21 — Parallel first-pass batch, cross-cut investigation, inventory/completeness improvements
 
 **Summary:** Three sets of changes bundled together. (1) First-pass branch set now runs via parallel sub-agents — each sub-agent receives only the SQL, an output path, and an explicit output contract (no reference files), enforcing context isolation. Main agent writes all SQL before spawning, waits for the full batch, then synthesises from the combined picture. Batch JSONs saved to `<run_dir>/batch_<cut_name>.json`. (2) Cross-cut added as a first-class investigation step with a formal trigger rule (≥8pp absolute or ≥20% relative), enumerated cross-cuts by funnel step, and a generic 2-dimension query template in `context.md`. (3) Inventory queries overhauled: period-median queries (APPROX_QUANTILES) replace single-date snapshots, bridge table fixed to `dim_experience_management WHERE variant_status = 'Active'`, time-series interpretation rewritten with trend-based classification, multi-TGID verdict patterns added to `report_structure.md`. Investigation completeness rules tightened across SKILL.md c022–c027.

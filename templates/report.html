@@ -125,6 +125,15 @@
     /* ─── Plotly ────────────────────────────────────────────── */
     .js-plotly-plot { width: 100% !important; }
 
+    /* ─── ↗ link-to-table affordance — see report_structure.md "↗ link-to-table pattern" ── */
+    /* Used in Section 1 callout, Section 2 action cards, Hypotheses Explored "Test run" column.
+       Routes to a Section 3 .analysis-block by its `id` attribute. Bare ↗ for internal navigation;
+       `Source · date ↗` for Slack citations. NEVER use inside Section 3 verdict lines/subtexts. */
+    .ref-link { color: #3a4a8a; text-decoration: none; font-size: 12px; font-weight: 700; margin-left: 3px; }
+    .ref-link:hover { color: #c62828; }
+    html { scroll-behavior: smooth; }
+    .analysis-block:target { box-shadow: 0 0 0 3px #ffe082; transition: box-shadow 0.4s; }
+
     /* ─── Print ─────────────────────────────────────────────── */
     @media print {
       body { background: #fff; }

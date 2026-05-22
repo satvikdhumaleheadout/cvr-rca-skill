@@ -25,6 +25,23 @@ Reading the skill files first is what makes the failure mode classification (Sec
 
 ---
 
+## Direction-aware scoring note
+
+The 7 themes apply to **both** CVR-decline and CVR-improvement RCAs, but the "Score high if" / "Score low if" examples below are written in decline-language ("the root cause", "what broke"). When scoring an improvement-direction RCA, mentally translate:
+
+- "Root cause" → "primary driver of the lift"
+- "What broke?" → "What drove the improvement?"
+- "Why did it break?" → "Why did it improve?"
+- "When did it break?" → "When did improvement begin?"
+
+The structural criteria are identical — the report must still commit to a specific finding, the hypotheses must still be falsifiable, the evidence must still be tied to data, and the DRIs must still be specific. The semantic flavour just inverts.
+
+**One direction-specific exception — Theme 3 (Investigation Effort).** For decline RCAs, depth is unambiguously good — running session recordings, supply queries, cross-cuts all strengthen the score. For improvement RCAs, depth is good only if proportionate to the structural delta:
+- If `structural_delta_cvr` is small (<+0.15pp after seasonal subtraction), exhaustive deep-dive queries lower the score — they're over-investigating a noise-level structural gain.
+- If `structural_delta_cvr` is meaningful (≥+0.20pp), the depth standard matches decline RCAs.
+
+Use the structural delta (not the headline pre/post delta) to calibrate expected investigation depth on improvement runs.
+
 ## Scoring
 
 For each of the 7 themes below, give:

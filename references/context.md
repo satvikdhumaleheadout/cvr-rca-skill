@@ -1427,6 +1427,89 @@ intersection. If device shows a mobile drop AND language shows a French drop,
 the real number is French × iOS — it may be 10× larger than either dimension
 alone. Always test the intersection before concluding the causes are independent.
 
+### Catalogue change — when a TGID launches, is disabled, or is restructured
+
+A first-class data-driven hypothesis in both directions (see `hypothesis.md → "Pattern 11: Catalogue change"`). Use when the experience-level breakdown shows a top experience whose checkout volume changed substantially pre vs post (≥20% relative or accounting for ≥10% of the net CE-level move). The query confirms whether a TGID actually entered or exited the catalogue within the analysis window — not just had a usage shift.
+
+**`dim_experience_management` columns of interest:**
+- `experience_id` (TGID) — primary key for the TGID
+- `tour_id` (TID) — variant-level
+- `variant_status` — `'Active'` vs `'Disabled'`
+- `tour_name` — human-readable TID name
+- Activation/created timestamp lives on this table; check schema for the exact column name (`experience_created_at`, `created_at`, or the most recent `updated_at` when `variant_status` flipped to `Active`). Use the column that matches an Active status flip.
+
+**Catalogue change query (per-CE first-appearance scan):**
+
+```sql
+-- Identifies TGIDs whose first activation date for the CE falls inside the analysis window.
+-- Use when the experience-level breakdown shows a top experience with substantially changed
+-- checkout volume pre vs post — confirms whether catalogue itself changed, not just usage.
+
+SELECT
+    de.experience_id,
+    de.experience_name,
+    MIN(dem.created_at)                                                              AS first_active_at,
+    MAX(dem.updated_at)                                                              AS last_updated_at,
+    COUNT(DISTINCT CASE WHEN dem.variant_status = 'Active'   THEN dem.tour_id END)   AS active_tids,
+    COUNT(DISTINCT CASE WHEN dem.variant_status = 'Disabled' THEN dem.tour_id END)   AS disabled_tids
+
+FROM `headout-analytics.analytics_reporting.dim_experience_management` AS dem
+INNER JOIN `headout-analytics.analytics_reporting.dim_experiences`     AS de
+    ON dem.experience_id = de.experience_id
+
+WHERE de.combined_entity_id = '<CE_ID>'
+
+GROUP BY 1, 2
+
+ORDER BY first_active_at DESC
+```
+
+Interpret the result against the analysis window:
+- `first_active_at` within `[pre_start, post_end]` → the TGID is a launch within the window (Pattern 11 launch trigger).
+- `first_active_at` predates `pre_start` AND `active_tids = 0` in current snapshot → the TGID was disabled at some point; cross-check with `last_updated_at` to see when the flip occurred.
+- A material change in `active_tids` between pre and post snapshots → variant-level restructure (a TID was added or removed within the parent TGID).
+
+**Alternative first-appearance check via `product_rankings_features`:**
+
+If the management dimension column isn't reliable for a given CE, fall back to first-appearance in the rankings feature snapshot:
+
+```sql
+SELECT
+    CAST(product_id AS STRING) AS experience_id,
+    MIN(event_date)            AS first_seen_in_features,
+    MAX(event_date)            AS last_seen_in_features,
+    COUNT(DISTINCT event_date) AS days_present
+
+FROM `headout-analytics.analytics_features.product_rankings_features`
+
+WHERE CAST(query_id AS STRING) = '<CE_ID>'
+  AND event_date BETWEEN '<PRE_START>' AND '<POST_END>'
+
+GROUP BY 1
+
+HAVING MIN(event_date) > '<PRE_START>'   -- first appeared inside the window
+    OR MAX(event_date) < '<POST_END>'    -- disappeared inside the window
+
+ORDER BY first_seen_in_features DESC
+```
+
+This is directional only — the rankings feature snapshot can have its own coverage gaps. Treat as a sanity check, not a definitive source. The `dim_experience_management` query above is authoritative for activation status.
+
+**Note on external corroboration:** Catalogue events are also commonly flagged in Slack (#mkt-* channels by Marketing/Growth, or by BDM in market channels). If a Slack thread names the launch/removal date, that's a Pattern A or Pattern B Slack signal (see `hypothesis.md → "Slack signal classification"`) — corroborates the data finding but doesn't substitute for the query. Run the data check regardless; Slack provides the *why*, the data provides the *when* and *what*.
+
+---
+
+### Same-period vs different-period external metrics
+
+When an external source (Slack thread, BDM survey, FabriGPT WBR, internal dashboard) reports a metric that differs from what the funnel investigation can measure pre/post, distinguish carefully:
+
+- **Same-period metrics** — anything computable from the funnel table over the report's pre/post window (CVR, LP2S, S2C, C2O, user counts, order counts, completion at the CE level). The investigation owns these — don't cite external numbers for metrics already in the report.
+- **Different-period metrics** — YoY GBV, vs plan, prior quarter share, supplier-side YoY revenue, macro travel demand. The funnel investigation cannot compute these from the 90-day rolling window. **Cite them as-is from the external source** with the source name and the timeframe explicit (per `report_structure.md → "Timeframe-citation rule"`); do not attempt to re-derive them. The 90-day baseline data does include an LY overlay for CVR specifically, but it is the only YoY metric the pipeline produces — any other YoY claim must reference its external source.
+
+This boundary keeps the report's data-driven story coherent (no fabricated YoY figures) while still allowing Slack reframing context to enter via Layer 2 / Market Context. The Layer-1 Slack citation format (`Source · date ↗`) and the timeframe-citation rule are the enforcement mechanism.
+
+---
+
 ### Experience-level S2C and inventory
 
 For S2C hypotheses, query `COUNT(DISTINCT user_id)` and S2C rate by
@@ -1494,3 +1577,4 @@ thinking and makes the inference scannable.
 | c024 | 2026-05-08 | Removed "Booking-horizon pre-check" section added in c023. Post-mortem review confirmed the motivating example (Vatican Museums as a 60–90 day horizon product) was factually wrong — CE 189 is a standard short/medium horizon product and the zeros in both periods were genuine stable zeros, not a window mismatch. The pre-check also adds no analytical value: if a product genuinely had all experience_dates beyond 30 days, both pre and post would show zeros, and the existing "flat and stable → supply ruled out" interpretation already gives the correct conclusion without a separate pre-check query. |
 | c025 | 2026-05-13 | Added usage note to the L2+ canonical query pattern for `page_url` as dimension: sort output by `users_lp DESC` (not alphabetically) to surface majority-contributor URLs first; long-tail URLs produce high-variance rate estimates and should be treated as directional only. |
 | c026 | 2026-05-08 | Added dedicated URL breakdown query immediately after the canonical L2+ query pattern. The new query adds a `totals` CTE that computes `pct_of_lp` (each URL's share of CE LP traffic per period). This metric is required to distinguish routing shifts (traffic moved between URLs, rates held) from performance shifts (a URL's own rate dropped, share held). The canonical L2+ query cannot answer the routing question — without `pct_of_lp`, Claude would have to construct the totals CTE on the fly, which is the class of error the insights report flagged. The URL breakdown query carries all fixed segment filters from the cascade declaration and sorts by `users_lp DESC`. |
+| c027 | 2026-05-22 | Two new sections under "Dimensions to Query and When". **(1) "Catalogue change — when a TGID launches, is disabled, or is restructured"** — adds the per-CE first-appearance scan against `dim_experience_management` (authoritative for activation status) plus a fallback first-appearance check via `product_rankings_features`. Used to test Pattern 11 in `hypothesis.md`. Data-driven trigger via experience-level breakdown — no Slack input required. Bidirectional: works for both TGID launch (often improvement) and TGID disablement (often decline). Note added on external corroboration via Slack — catalogue events are commonly flagged in #mkt-* channels but the data check is run regardless; Slack provides the *why*, data provides *when* and *what*. **(2) "Same-period vs different-period external metrics"** — establishes the data boundary for external metric citations. Same-period metrics (CVR/LP2S/S2C/C2O/users/orders over pre vs post) belong to the investigation and shouldn't be substituted by external numbers. Different-period metrics (YoY GBV, vs plan, supplier-side YoY) are cited as-is from the external source with timeframe explicit — the pipeline cannot re-derive them from the 90-day rolling window (LY CVR is the sole exception). Prevents the kind of timeframe-mixing confusion that surfaced in the CE 1223 Important Context callout. |

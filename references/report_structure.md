@@ -30,6 +30,94 @@ Seasonal framing, known events, and holidays are permitted when a corresponding 
 - ✅ "The onset aligns with Easter weekend (Apr 18–20), where the daily chart shows a sharp CVR drop on Apr 18."
 - ❌ "The spring season typically brings lower-intent traffic."
 
+**5. Preserve Headout-native jargon — do not paraphrase.**
+Keep company-specific vocabulary as it is used internally: WBR (Weekly Business Review), SP (supply partner), GBV (Gross Booking Value), RR vs plan, TGID, TID, VID, CR%, FabriGPT, MB / HO, LP2S / S2C / C2A / A2O / C2O. These terms signal that findings were sourced authentically from the data and Slack threads stakeholders actually use. Paraphrasing them ("the weekly business review", "supply-partner-side reports") softens the signal and reduces trust — a stakeholder cannot tell whether the report quoted the source or interpreted it.
+- ✅ "FabriGPT WBR · May 18 shows GBV −20% YoY, 64% RR vs plan."
+- ❌ "An internal weekly report from May 18 shows revenue is 20% lower than last year and we're at 64% of plan."
+
+This rule does NOT override rule 1 — investigation-internal labels (Path A/B, Case A/B/C, locus, lost_checkouts_delta) are not Headout-native jargon; they are skill-internal terms and must still be translated to business language in the report.
+
+---
+
+## Slack integration & link-to-table styling
+
+These rules govern how Slack context (collected by the background sub-agent per `SKILL.md → Step 2 → Slack context — fire and forget`) surfaces in the report, and how the reader navigates between findings and supporting evidence.
+
+### Three layers of Slack integration
+
+**Layer 1 — Narrative weaving (default, low bar).**
+Whenever Slack adds colour, mechanism, or timing detail that sharpens the existing narrative, weave it into the *regular* callout questions and Section 3 verdict subtexts — not only the dedicated Important Context item. So "What drove the improvement?", "What broke?", "What's holding it back?", "When did it begin?", and any analysis block subtext can pull from Slack.
+
+- Citation format inline: `Source · date ↗` — name and date stay visible (signals "this is from Slack"); the arrow is the clickable router to the Market Context block in Section 3 where the full thread link lives.
+- **One citation per concept.** If the same Slack thread is the source for three sentences in a paragraph, cite it once at the most natural anchor — don't re-cite the same source line after line.
+- When the Slack timeframe matches the report's pre/post, light attribution is sufficient — no need to keep flagging the source after the first attribution in the paragraph.
+
+**Layer 2 — Important Context callout-item (high bar).**
+A third or fourth `.callout-item` block in the Section 1 callout reserved for Slack signals that:
+- Introduce a metric or timeframe outside the report's primary comparison (YoY when report is pre/post; vs plan; macro context), AND
+- Would cause a stakeholder to act differently or prioritise differently than the data alone would suggest.
+
+The bar is high — most RCAs will not have one. Four "decision-changing" tests:
+1. Does it change which team should act?
+2. Does it change the priority of the action?
+3. Does it contradict the obvious interpretation of the metric?
+4. Does it introduce a metric or timeframe not in the report's primary comparison?
+
+If none apply, the signal lives only in the Section 3 Market Context block — do not clutter Section 1.
+
+q-label format: `Important context — [short category]`. Category tag is Claude's choice; examples: "different timeframe", "operational change", "market signal", "supplier issue". Position: after the primary narrative items in the callout (third or fourth slot).
+
+Important Context applies to **both** CVR-declined and CVR-improved cases:
+- **Decline example:** a CVR drop where Slack/WBR shows the entire market is down 30% reframes the urgency — the action is no longer "fix our funnel" but "we are outperforming the market."
+- **Improvement example:** a CVR gain where YoY GBV is −20% reframes a celebration into "we are converting better within a shrunken pool."
+
+**Layer 3 — Market Context analysis block in Section 3 (conditional).**
+A dedicated `.analysis-block` rendered only when Slack returned at least one signal of pattern B (mechanism explanation) or C (reframing context). Pure routine corroborations (pattern A) of findings the data already proved do not require this block — those live as parenthetical citations after verdict subtexts only. See "Market context & operational signals block" in the Section 3 spec below for the full HTML pattern.
+
+### Slack signal patterns (cross-reference)
+
+The classification logic for incoming Slack signals lives in `hypothesis.md → "Slack signal classification"`. Four patterns: A (direct corroboration), B (mechanism explanation), C (reframing context), D (testable gap). Each surfaces in the report differently:
+
+| Pattern | Where it surfaces |
+|---|---|
+| A — direct corroboration | Inline `(corroborated ↗)` or `(per Author · date ↗)` in the relevant block's subtext + Source column in Hypotheses Explored table |
+| B — mechanism explanation | Layer 1 narrative weaving + row in Market Context block |
+| C — reframing context | Layer 2 Important Context callout-item + row in Market Context block |
+| D — testable gap | Result of the one-query test becomes a regular finding in Section 3, cited inline `(prompted by Source · date ↗)`. Don't double-list in Market Context. |
+
+### Timeframe-citation rule
+
+When citing a metric from a Slack source whose timeframe **differs** from the report's pre/post comparison (YoY, vs plan, vs LY, prior quarter, etc.), the report must explicitly name the timeframe in the same sentence:
+- ✅ "Year-over-year is a different picture: CE 1223 GBV is −20% vs the same period in 2025 (FabriGPT WBR · May 18 ↗)."
+- ❌ "The absolute order count is below LY plan." *(does not name the timeframe; reader cannot reconcile with the report's pre/post finding.)*
+
+When the Slack timeframe **matches** the report's pre/post window, light attribution is sufficient — no need to repeat the timeframe.
+
+### Slack corroboration upgrades evidence on confirmed findings
+
+When Slack confirms a mechanism that has already been CONFIRMED via data — particularly on declines, where the action card is going to a DRI for execution — elevate the citation from a bare `(corroborated ↗)` parenthetical to an inline named source: `(per [Author · date] ↗)`. Naming the source raises stakeholder confidence: it moves a finding from "we measured it" to "we measured it AND the BDM/Supply/Marketing team has independent corroboration." Use this on the verdict subtext of the analysis block where the data-driven finding lives. Do not stack the same citation across multiple subtexts — one elevation per finding.
+
+### ↗ link-to-table pattern
+
+Every Section 3 analysis block carries an `id` attribute (see "Anchor ID convention" in the Visual Spec). Claims in Sections 1 and 2 — and the Hypotheses Explored "Test run" column in Section 3 — link to the primary supporting block via a small `<a class="ref-link" href="#block-id">↗</a>` icon.
+
+**Where to use ↗ (do):**
+- Section 1 callout — after every numeric or named-finding claim cluster, pointing to the primary block that carries the supporting evidence. A claim cluster is "a complete thought," not "every individual number"; aim for one arrow per sentence.
+- Section 2 action cards — after the `cause` line, pointing to the block that confirms the cause.
+- Section 3 Hypotheses Explored table, "Test run" column — pointing to the block that ran the test.
+- Slack source citations everywhere — the arrow in `Source · date ↗` routes to the Market Context block.
+
+**Where NOT to use ↗ (don't):**
+- Inside Section 3 verdict lines, subtexts, or any non-Hypothesis table within Section 3. Section 3 *is* the evidence — jumping from one Section 3 block to another is navigation noise.
+- After every individual percentage; one arrow per claim cluster is enough.
+- As a substitute for prose. The reader should be able to read the sentence and understand the finding without clicking anything; the arrow is a verification affordance.
+
+**Citation format split:**
+- Internal navigation: bare `↗` (one character, no text)
+- Slack source: `Source · date ↗` (name + date as text, arrow as the link)
+
+Both use the same `.ref-link` CSS class — visually consistent, semantically distinct by context.
+
 ---
 
 ## Section 1 — Executive Summary
@@ -73,7 +161,7 @@ One callout box — the most important element in the entire report. It answers 
 **When CVR improved:** Green left border (`#2e7d32`), heading "CVR Improved — What's Driving It & What's Holding It Back". Three questions:
 
 - **What drove the improvement?** Lead with the positive driver — which step improved, by how much, and the mechanism (seasonal uplift, paid mix growth, supply improvement, etc.). Include the structural delta vs LY: a large seasonal improvement with only +0.09pp structural delta reads very differently from +0.5pp structural gain.
-- **What's holding it back?** Name any step that declined despite overall CVR being up. Quantify both the rate drop and the checkout impact. If CVR improved across all steps, write "No significant headwinds — all funnel steps improved."
+- **What's holding it back?** Name any step that declined despite overall CVR being up. Quantify both the rate drop and the checkout impact. If CVR improved across all steps, write "No significant headwinds — all funnel steps improved." **Magnitude threshold:** if the headwind's net contribution to ΔCVR is less than ~10% in absolute terms (e.g., −0.04pp on a +0.51pp total CVR move), fold it into a sub-bullet within "What drove the improvement?" rather than giving it a standalone callout item. Avoids overstating noise-level dilution as a meaningful drag on an otherwise clear improvement.
 - **When did the headwind emerge?** (or "When did improvement begin?" if no headwind). Timing classification as for the decline case.
 
 **If multiple root causes confirmed:** callout names the primary driver. Secondary findings get action cards in Section 2.
@@ -112,6 +200,18 @@ Specific enough to forward directly:
 - ❌ "Supply team — investigate availability"
 - ✅ "Supply team — check availability configuration for Keukenhof Entry Tickets (TGID 10118) for dates Apr 20 – May 11; API cut-off period may be restricting inventory the SP has available"
 
+### Improvement-direction action cards — three sub-templates
+
+CVR-improvement RCAs produce inherently softer actions than declines (no broken thing to fix). The action card *structure* stays identical, but each card falls into one of three templates. Pick the template that matches the confirmed finding; the spec below names what each must contain to remain testable rather than drifting into "monitor the situation."
+
+- **Protect.** Used when a confirmed mechanism is driving the lift and could regress if neglected (a ranking position, inventory window, content state, budget allocation). The card must name the specific TGID / URL / supply window / campaign that's carrying the gain and the operational lever that supports it. DRIs: Growth + BDM + Supply, depending on which lever. Example: *"Keep TGID 8869 (Pompeii Entry Tickets) in its current top-of-listing position and confirm with the SP that same-day inventory holds through July — the +0.59pp CVR gain on this segment depends on near-zero `days_to_first_available_date`."*
+
+- **Extend.** Used when a confirmed segment grew and there is headroom to grow it further (a paid channel improved CVR, a geo surged in volume, a new TGID launched well). The card must name the segment, the headroom signal, and a specific next move. DRIs: Performance Marketing + Growth + BDM. Example: *"Italy domestic traffic grew +26.7% on Google Ads MB at higher CVR — capture more by sustaining Italian-language Google Search spend through May–August peak. Quantify the budget reallocation that would scale the segment without diluting CVR."*
+
+- **Investigate-headwind.** Used when a small headwind is forming under the lift (HO dilution, channel mix drift, supplier softness). The card must propose the **specific next query** the DRI should run, not just the team to ask. Example: *"Audit which sources drove the +854-user HO LP increase — paid expansion, new SEO ranking, or affiliate. Run `mixpanel_user_page_funnel_progression` for HO with `previous_page_url` and `channel_name` cuts, May 1–20, to surface the new entry points; LP2S falling 46% → 39% suggests the new arrivals are browsing without intent."*
+
+These templates are not mutually exclusive — a single improvement RCA can produce one Protect, one Extend, and one Investigate-headwind. Maximum three cards total still applies. Do not pad with a Protect card if there is no real lever to protect; if only one type fits the finding, one card is correct.
+
 ---
 
 ## Section 3 — Supporting Analysis
@@ -144,10 +244,11 @@ Include only analyses that directly support or rule out a claim made in Sections
 4. Daily trend chart (C2O / S2C / LP2S for the primary driver)
 5. Primary driver dimension cuts and experience/URL breakdowns (as applicable)
 6. Secondary driver evidence (if applicable — see SKILL.md c023 for scoping)
+6.5. **Market context & operational signals** (conditional — render when Slack returned ≥1 pattern B or C signal; see "Slack integration & link-to-table styling" above)
 7. Ruled-out dimensions block
 8. Hypotheses explored (always last)
 
-Conditional blocks (inventory, session recordings, price analysis) slot between items 5 and 6 within the relevant funnel step's evidence.
+Conditional blocks (inventory, session recordings, price analysis, weekday composition) slot between items 5 and 6 within the relevant funnel step's evidence. The Market Context block sits *after* secondary driver evidence (item 6.5) so the data-driven story leads — external/Slack context is supporting evidence, not the primary lens.
 
 | Analysis | When to include |
 |---|---|
@@ -164,6 +265,8 @@ Conditional blocks (inventory, session recordings, price analysis) slot between 
 | Inventory daily time-series charts | When S2C drop is confirmed at a specific TGID — always run alongside the TID snapshot. Four line charts (one per lead-time bucket), `extracted_date` on x-axis, total tickets on y-axis. Path B: pre and post as overlaid series. Path A: post series only. Path X: omit entirely — add an inline note in the S2C evidence block: *"Inventory data unavailable — post period ended more than 30 days ago. Supply mechanism cannot be confirmed or ruled out from data."* |
 | Price analysis | When price changed and timing correlates with LP2S onset. |
 | Session recordings | When recordings were pulled — present as a structured table (see below). |
+| Weekday composition | When pre vs post differs materially in weekday/weekend mix AND the report attributes any portion of the move to that imbalance. Render only when material — otherwise the check stays in the transcript. Two-row table: pre weekdays/weekends, post weekdays/weekends; subtext explains the implied calibration on the headline metric. |
+| Market context & operational signals | When Slack returned at least one pattern B (mechanism explanation) or C (reframing context) signal. Three-column table: Signal · What it tells us about this report · Source. See HTML pattern below. |
 
 ### URL-level breakdown block
 
@@ -775,9 +878,41 @@ Do not show separate tables for dimensions that produced no signal. The ruled-ou
   .ruled-out { font-size: 13px; color: #777; font-style: italic; padding: 6px 0 0; }
   .chart-container { margin-top: 16px; }
 
+  /* ↗ link-to-table affordance — see "↗ link-to-table pattern" above */
+  .ref-link { color: #3a4a8a; text-decoration: none; font-size: 12px; font-weight: 700; margin-left: 3px; }
+  .ref-link:hover { color: #c62828; }
+  html { scroll-behavior: smooth; }
+  .analysis-block:target { box-shadow: 0 0 0 3px #ffe082; transition: box-shadow 0.4s; }
+
   footer { text-align: center; font-size: 12px; color: #aaa; padding: 24px; margin-top: 20px; }
 </style>
 ```
+
+### Anchor ID convention — Section 3 blocks
+
+Every `.analysis-block` in Section 3 carries an `id` attribute so Sections 1, 2, and the Hypotheses table can route to it via ↗ arrows. Use this canonical naming:
+
+| Block | ID |
+|---|---|
+| Mix cascade analysis block | `block-cascade` |
+| Geo / Non-Geo overview | `block-geo` |
+| Shapley decomposition | `block-shapley` |
+| 90-day CVR trend chart (Section 1, also anchorable) | `chart-90day` |
+| Daily trend chart (C2O/S2C/LP2S) | `chart-daily-c2o` (substitute step name) |
+| Funnel sub-step decomposition | `block-substeps` |
+| Experience-level breakdown | `block-experience` |
+| URL-level breakdown | `block-url` |
+| Inventory TID summary | `block-inventory` |
+| Session recordings | `block-recordings` |
+| Lead-time distribution | `block-leadtime` |
+| Price analysis | `block-price` |
+| Weekday composition | `block-weekday` |
+| HO / MB segment-specific block (when broken out) | `block-ho` / `block-mb` |
+| Market context & operational signals | `block-market-context` |
+| Dimensions checked — ruled out | `block-ruled-out` |
+| Hypotheses explored | `block-hypotheses` |
+
+Naming convention: `block-<kebab-name>` for tables and text blocks, `chart-<kebab-name>` for chart containers. When a CE-specific block doesn't fit the list (e.g., a custom breakdown by `previous_page_url`), invent a kebab-name following the same pattern — but reuse canonical IDs wherever the block matches the canonical type.
 
 ---
 
@@ -1128,9 +1263,57 @@ For Uniform and Mix-dominant outcomes, omit the note and continue to Shapley.
 
 ---
 
+### Market context & operational signals block
+
+Render this block in Section 3 between item 6 (secondary driver evidence) and item 7 (Ruled-out dimensions) **only when Slack returned at least one pattern B (mechanism explanation) or C (reframing context) signal** (see "Slack integration & link-to-table styling" above). Skip the block entirely if Slack returned only pattern A corroborations or nothing useful — silence is fine.
+
+Three-column table. Title is generic ("Market context & operational signals") — never bake the channel name (e.g., `#mkt-italy-switzerland-malta`) into the heading; let the Source column carry channel context.
+
+The block is direction-agnostic: it works for declines (e.g., "supplier deploy explains the break on May 6", "bug alert correlates with the drop date") and for improvements (e.g., "MB assortment cap on May 7 concentrates traffic", "YoY GBV −20%, customers trading down").
+
+```html
+<div class="analysis-block" id="block-market-context">
+  <div class="block-title">Market context &amp; operational signals</div>
+  <div class="verdict-line neutral">[One-line summary of what Slack adds — corroboration, reframing, or mechanism explanation. Direction-agnostic.]</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Signal</th>
+        <th>What it tells us about this report</th>
+        <th style="width:140px;">Source</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>[Slack thread compressed to one sentence in plain language — preserve Headout-native jargon per Styling rule 5]</td>
+        <td>[The connection — corroborates which finding, reframes which interpretation, or explains which mechanism. This is the only column requiring Claude's commitment.]</td>
+        <td><a href="[slack-thread-url]" target="_blank" style="color:#3a4a8a;font-size:12px;">[Author · date]</a></td>
+      </tr>
+      <!-- repeat one row per signal worth showing (typically 3–7 rows) -->
+    </tbody>
+  </table>
+
+  <p style="font-size:13px;color:#555;margin-top:12px;">
+    [Optional brief subtext if there are bug/operational threads not material to the headline but worth flagging to Ops — keep to one sentence.]
+  </p>
+</div>
+```
+
+Layer 1 and Layer 2 ↗ arrows that cite Slack sources all route to this block via `href="#block-market-context"`. The Source column's hyperlinks are external (to the Slack thread itself).
+
+---
+
 ### Shapley decomposition block
 
 Use a proportional flex bar — not a Plotly waterfall. Each segment's `flex` value equals its percentage contribution.
+
+**Sign-aware rule for mixed contributions:** When one funnel step contributes in the opposite direction (e.g., a CVR improvement where LP2S contributed −9% while C2O contributed +86%), `flex` proportional to *absolute value* will compress the visual scale of the dominant driver and over-represent the small counter-step. Two acceptable patterns:
+
+1. **Absolute-value flex + sign prefix on label** (preferred for mild offsets): use `flex: 86` for C2O, `flex: 9` for the negative LP2S, and label the negative bar `−9%` or `LP2S −9%`. Add a `style="background: #6c8ebf;"` override on the negative bar so it's visually distinct from the positive bars (which use the canonical step colours).
+2. **Net-positive flex only** (for large offsets > 25%): omit the counter-step from the flex bar entirely and call it out in the legend below as a separate line item with sign. Avoids the bar appearing balanced when 86% of the move is in one direction.
+
+Pick (1) when the counter-step is small noise (< 20% absolute). Pick (2) when it materially distorts the visual.
 
 ```html
 <div class="analysis-block">
@@ -1489,3 +1672,4 @@ Plotly.newPlot('trend-90day', traces90d, {
 | c022 | 2026-05-14 | Section 2 action card spec — added evidence threshold rule: before creating a standalone action card, verify both the rate drop and raw event count. Directional signals from small samples belong as a sub-bullet inside the most relevant existing card, not as a standalone card. Example sub-bullet wording provided. |
 | c023 | 2026-05-14 | Section 3 "What belongs in Section 3" — added fixed ordering for always-present blocks (numbered 1–8: mix cascade + Fixed Segment banner → Geo/Non-Geo → Shapley → daily trend → primary driver cuts → secondary driver evidence → ruled-out dimensions → hypotheses explored). Conditional blocks (inventory, session recordings, price) slot within primary driver evidence. Replaces the previous unordered table header which gave no sequencing signal. |
 | c024 | 2026-05-08 | Added "URL-level breakdown block" HTML pattern section, placed before the inventory section format. Fills the gap where the "What belongs in Section 3" table listed "URL-level breakdown" with no format spec. Two verdict forms: performance verdict (rate dropped, share held) and routing verdict (share shifted, rates held). Table columns: URL · Period · Users · % of LP · LP2S · S2C · C2O · CVR. `.highlight-row` on URLs where rate dropped meaningfully or `pct_of_lp` shifted substantially. Pointer to the dedicated URL breakdown query in `context.md` (not the canonical L2+ query — that query does not produce `pct_of_lp`). |
+| c025 | 2026-05-22 | Major styling expansion driven by CE 1223 (Pompeii) RCA learnings — bidirectional support and Slack integration. **Slack integration:** new "Slack integration & link-to-table styling" section consolidates three-layer model (narrative weaving / Important Context callout-item / Market Context Section 3 block), four-pattern classification (A/B/C/D), timeframe-citation rule, one-citation-per-concept rule, Slack-corroboration-upgrades-evidence rule for declines. Section 3 ordering gains item 6.5 (Market context & operational signals, conditional). New HTML pattern for Market Context block (3-column table, generic title — never bake channel name into heading). **Link-to-table:** every Section 3 `.analysis-block` carries an `id` attribute; canonical anchor ID convention listed. New ↗ ref-link CSS (`.ref-link`, `html { scroll-behavior: smooth }`, `.analysis-block:target` highlight). Usage rules: ↗ in Section 1 callout, Section 2 action cards, Hypotheses Explored "Test run" column; never inside Section 3 verdict lines or subtexts. Citation format split: bare `↗` for internal navigation; `Source · date ↗` for Slack citations. **Bidirectional support:** Section 1c CVR-improved variant gains magnitude threshold for "What's holding it back" (<~10% of total ΔCVR → fold into sub-bullet); Section 2 gains improvement-direction action card sub-spec (Protect / Extend / Investigate-headwind templates). **Styling rule 5 (new):** preserve Headout-native jargon (WBR, SP, GBV, RR vs plan, TGID, TID, VID, CR%, FabriGPT, etc.) — paraphrasing reduces trust. Does not override rule 1 — investigation-internal labels (Path A/B, Case A/B/C) still translated. **Shapley sign-aware rule:** flex bar handles mixed-sign contributions cleanly — absolute-value flex + sign prefix for mild offsets (<20%), or net-positive flex only for large offsets (>25%). **D3 — Weekday composition Section 3 block** added to "What belongs in Section 3" table — renders only when material and the report attributes any portion of the move to weekday imbalance. |

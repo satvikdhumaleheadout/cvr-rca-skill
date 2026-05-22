@@ -217,6 +217,88 @@ Actions are drawn from historical Headout RCAs across 21 MMPs and the CVR Cause-
 
 ---
 
+## Root Cause 11: Catalogue change (TGID launched, disabled, or restructured)
+
+**Signal:** Experience-level breakdown shows a top experience whose checkout volume changed substantially pre vs post (≥20% relative or accounting for ≥10% of net CE-level move). `dim_experience_management` query confirms a TGID's `first_active_at` falls inside the analysis window, or a TGID flipped to/from `variant_status = 'Disabled'` mid-window. May be paired with an MB assortment cap or product restructure called out in Slack.
+
+This pattern is bidirectional. A TGID launch can cannibalise higher-CVR variants (decline) or absorb traffic into a higher-CVR variant (improvement); a TGID disablement can remove high-converting demand (decline) or remove low-CVR variants that were diluting the catalogue (improvement). The action depends on direction and the relative CVR of the changed variant vs siblings.
+
+**Actions (decline direction — TGID cannibalises or disappears):**
+
+| Action | DRI | Priority |
+|--------|-----|----------|
+| Restore the higher-CVR sibling TGID's ranking position if a new variant has displaced it — explicit re-ranking via `dim_experience_management` ordering or merchandising override | Growth / Merchandising | P1 |
+| Investigate why the high-CVR TGID was disabled — confirm with BDM/Ops whether the disable was intentional (vendor issue, content gap) or accidental (a routine update flipped status). Restore if accidental. | BDM / Ops | P1 |
+| If the new launching TGID has lower native C2O, demote it from top-of-listing until either its CVR improves or it's repositioned as a niche option | Growth | P2 |
+| Add the missing high-demand variant configurations (pax types, time slots, languages) that may have been lost in a TGID consolidation | Ops / BDM | P2 |
+
+**Actions (improvement direction — TGID launched well or restructure landed):**
+
+| Action | DRI | Priority |
+|--------|-----|----------|
+| **Protect** — keep the launching TGID in its current top-of-listing position; confirm with SP that inventory holds for the projected peak; quantify the incremental CVR contribution to support sustained investment | Growth / Merchandising + BDM | P2 |
+| If an MB assortment cap drove the lift, document the kept-vs-cut set so future MB assortment edits don't accidentally revert it | Growth | P2 |
+| Audit content/title updates that landed during the window — surface the specific changes so they can be replicated on other low-CVR TGIDs in adjacent CEs | Content / Growth | P3 |
+| Pre-register the new TGID with the fraud team if not done yet — prevents A2O over-blocking once volume grows further | Ops / Payments | P2 |
+
+**Historical reference:** CE 1223 Pompeii (May 2026) — new Skip-the-line Guided Tour with Archaeologist (TGID 25518) more than doubled checkout volume; MB assortment cap to 8 products on May 7 concentrated traffic onto higher-CVR TGIDs; combined catalogue restructure explained part of the +0.23pp structural CVR delta.
+
+---
+
+## Improvement direction — action templates
+
+CVR-improvement RCAs produce inherently softer actions than declines (no broken thing to fix). The action card *structure* in the report stays identical (priority badge, cause, DRI, bullet list — see `report_structure.md → Section 2`), but each card falls into one of three templates. Use this section as the action library when populating cards for an improvement-direction confirmed root cause.
+
+These templates are not mutually exclusive — a single improvement RCA can produce one Protect, one Extend, and one Investigate-headwind. Maximum three cards still applies. If only one type fits the finding, one card is correct — do not pad.
+
+### Protect
+
+**Use when:** a confirmed mechanism is driving the lift and could regress if neglected (a ranking position, an inventory window, a content state, a budget allocation).
+
+**The card must name** the specific TGID / URL / supply window / campaign carrying the gain AND the operational lever supporting it. "Protect TGID X" alone is not actionable.
+
+| Action | DRI | Priority |
+|--------|-----|----------|
+| Lock the top TGID's listing position via explicit merchandising override or ranking pin until next quarterly review | Growth / Merchandising | P2 |
+| Confirm with SP that same-day inventory holds for the next 60 days at minimum — quantify and document the inventory commitment | BDM / Ops | P2 |
+| Document the operational state that drove the gain (MB assortment cap configuration, current content state, current pricing/promo levers) so a future edit doesn't unintentionally revert it | Growth / Ops | P3 |
+| If a specific pricing lever drove the lift (last-minute discount, promo code, fee reduction), formalise it — turn the temporary lever into a standing offer if the margin allows | BDM / Growth | P2 |
+
+### Extend
+
+**Use when:** a confirmed segment grew at favourable CVR and there is headroom to grow it further (a paid channel improved CVR, a geo surged in volume, a new TGID launched well).
+
+**The card must name** the segment, the headroom signal (what the data showed), and a specific next move (budget reallocation, campaign expansion, supply commitment).
+
+| Action | DRI | Priority |
+|--------|-----|----------|
+| Scale paid budget on the gaining channel proportional to its CVR uplift — quantify the incremental budget headroom against CPA targets | Performance Marketing | P2 |
+| Expand the gaining geo segment — add language-specific creative variants, increase market-level bids, or add a market-specific landing page | Performance Marketing / Growth | P2 |
+| Negotiate higher inventory commitment with the SP for the gaining experience — use the volume + CVR data as the case | BDM | P2 |
+| Replicate the structural change (content update, fee transparency, MB assortment discipline) across adjacent CEs in the same market or category | Growth / Content | P3 |
+
+### Investigate-headwind
+
+**Use when:** a small headwind is forming under the lift (HO dilution, channel mix drift, supplier softness) — not material enough to be the headline but worth flagging before it compounds.
+
+**The card must propose the specific next query** the DRI should run, not just the team to ask. The improvement-case investigate-headwind action stays testable.
+
+| Action | DRI | Priority |
+|--------|-----|----------|
+| Run the funnel breakdown for the diluting segment (HO, organic, specific channel) with `previous_page_url` and `channel_name` cuts to surface the new entry points behind the volume growth — share the query as part of the card | Performance Marketing / Analytics | P2 |
+| If channel mix is drifting toward lower-intent traffic, audit campaign keyword intent and landing-page match for the gaining channel before the next budget cycle | Performance Marketing | P2 |
+| Tag the next 30-day review with explicit thresholds — at what CVR or LP2S level on the diluting segment would action become urgent? | Performance Marketing / Growth | P3 |
+
+---
+
+## Slack-corroboration upgrade on decline actions
+
+When a decline action card is going to a DRI for execution AND a Slack thread confirms the same mechanism that the data confirmed (Pattern A in `hypothesis.md → "Slack signal classification"`), elevate the inline citation on the Section 3 verdict subtext from a bare `(corroborated ↗)` to a named source `(per [Author · date] ↗)`. This moves the finding from "we measured it" to "we measured it AND the BDM/Supply/Marketing team has independent corroboration" — directly strengthens stakeholder confidence in the P1/P2 action. Apply once per finding, not stacked across multiple subtexts.
+
+This is a styling rule, but the action library benefits from the elevated trust signal — DRIs are more likely to act on a card whose evidence cites both internal data AND an independent corroboration from the team that would normally own the diagnosis.
+
+---
+
 ## Changelog
 
 | # | Date | Changes |
@@ -225,3 +307,4 @@ Actions are drawn from historical Headout RCAs across 21 MMPs and the CVR Cause-
 | c002 | 2026-04-24 | RC1: added competitive intel skill pointer (P1, S2C context). RC2: added inventory skill pointer to lead-time bucket action. RC8: added pax setup skill pointer (P1). RC9: added `order_attempted_events_v2` column detail with note that automated query support is in development. RC10: added content audit sub-skill pointer (P1) |
 | c003 | 2026-05-06 | RC2 signal updated: replaced `count_days_available_30d` (unreliable proxy) with ticket counts in lead-time buckets from `inventory_availability` TID summary table as the primary signal for inventory constraint root cause. |
 | c004 | 2026-05-14 | RC9 — added DATA GAP action template for when the A2O locus is confirmed but the specific mechanism is unresolved because `order_attempted_events_v2` was not queried (backlogged). Template provides a specific BQ query scope and three sub-hypotheses for the DRI to test (inventory sync failure, gateway decline, fraud over-blocking), so the action card delivers a starting hypothesis rather than generic "investigate further" text. |
+| c005 | 2026-05-22 | Bidirectional support added. **(1) Root Cause 11: Catalogue change** — new bidirectional root cause covering TGID launch, disablement, and restructure events. Decline actions: restore high-CVR sibling ranking, investigate accidental disablement, demote low-CVR new launches. Improvement actions: protect the launching TGID, document the operational state that drove the gain, pre-register with fraud. Historical reference: CE 1223 Pompeii. **(2) "Improvement direction — action templates"** — three sub-templates for improvement-case action cards: **Protect** (lock the lever supporting the gain), **Extend** (scale the gaining segment), **Investigate-headwind** (propose the specific next query for small dilution signals). Each template lists 3–4 starter actions with DRIs and priorities. Templates are mutually compatible — a single RCA can produce one of each. **(3) Slack-corroboration upgrade on decline actions** — codifies the rule that Pattern A corroboration on a DRI-bound decline action card elevates the citation from `(corroborated ↗)` to `(per Author · date ↗)`. Increases stakeholder trust in P1/P2 actions. |

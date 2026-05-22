@@ -303,6 +303,62 @@ These checks are directional, not conclusive. If both experiences show similar p
 
 ---
 
+## Improvement direction — first-pass branches
+
+The decline-direction patterns above (LP2S / S2C / C2O sections, Mix routing exits) are the primary investigation patterns. **CVR-improvement RCAs use the same cascade and Shapley structure but with direction-sensitive branches** for the funnel-step deep-dive after the fixed segment is declared. Use this section after the cascade confirms a conversion-path story and the data-driven Shapley step is identified.
+
+The investigation rigour is the same — find a leaf (specific mechanism × segment × timing) — but the candidate mechanisms differ. Catalogue change (Pattern 11 below) is often the most informative branch in an improvement RCA.
+
+### LP2S improvement — first-pass branches
+
+Run dimension cuts in parallel:
+- `page_url` × LP2S rate and volume — a URL gaining traffic share with stable rates is a routing improvement (paid spend reallocated, new SEO ranking landed). A URL with rate improvement is a page-level lift (new top product, template change, image refresh).
+- `experience_id` × LP2S rate — a top experience whose LP2S rose materially points to either a content/media refresh on that listing or a price reduction (cross-check with `final_price_usd` from `product_rankings_features`).
+- `device_type` × LP2S rate — a uniform lift across devices is structural; a mobile-only lift points to a mobile UI improvement or page-performance gain.
+- `language` × LP2S rate — a single language gaining points to a campaign creative refresh or a localisation improvement (translation completion, geo-specific content launched).
+- `browsing_country` (Geo/Non-Geo) — a Geo-only LP2S lift points to domestic seasonal demand or a local campaign launch; a Non-Geo lift points to international traffic-quality improvement.
+
+**If pricing improved:** Query `final_price_usd` pre vs post — a meaningful price reduction (≥5%) on a top-volume TGID is a direct LP2S lever. Pair with availability check.
+
+### S2C improvement — first-pass branches
+
+Run dimension cuts in parallel:
+- `experience_id` × S2C rate — a top experience whose S2C rose materially is usually the story. Check: did availability expand for it? Did a new variant launch (Pattern 11)? Did its price drop?
+- `language` × S2C rate — a localised audience newly proceeding suggests fixed translation, fixed local pricing, or completed locale-specific content.
+- `device_type` × S2C rate — a mobile S2C lift is the strongest evidence of a select-page UI or performance improvement.
+
+**If experience concentrates upward — inventory expansion check:** Query the inventory time-series (Path A or Path B) for the improving TGID. An *increase* in ticket counts across lead-time buckets confirms supply expansion as the mechanism (SP loosened cut-off period, new release window, vendor added inventory). This is the symmetric counterpart of the supply-depletion check on declines.
+
+### C2O improvement — first-pass branches
+
+Check `c2o_sub` from `summary.json` first. C2O = C2A × A2O — both can lift independently and the mechanisms differ.
+
+**If C2A improved** (more users proceeding from checkout to attempt):
+1. **Pricing/fee transparency improvement** — fees moved earlier in the flow, mandatory add-ons removed, listing price aligned with checkout total. Check whether any fee structure change was deployed (cross-reference Slack at Step 2b, not L2+).
+2. **Checkout UX improvement** — a form field removed, autofill restored, promo code field redesigned, trust signal added. Most sensitive on mobile.
+3. **Pricing lever applied** — a last-minute discount, promo code, or fee reduction landed during the post window. Direct C2A lever on the affected TGID.
+4. **Pax setup simplification** — pax type configuration cleaned up, custom fields reduced. DRI: Ops/Product.
+
+**If A2O improved** (more attempted orders completing):
+1. **Payment gateway stabilised** — gateway timeout/error rate fell after a fix; specific failure-code rate dropped.
+2. **Fraud rule loosened** — a rule rollback or model update reduced false-positive blocks. Check fraud block rate by `fraud_evaluation_result_origin`.
+3. **Live inventory sync improved** — fewer slot-sold-out failures at the order-attempt step.
+
+**If C2O improved via catalogue mix shift** (one TGID gained checkout share at the expense of others, and the gaining TGID has higher native C2O):
+1. **Pricing signal** — gaining TGID is cheaper than the displaced TGIDs.
+2. **Availability signal** — gaining TGID has near-term inventory while displaced TGIDs don't.
+3. **Catalogue change** — gaining TGID is new (Pattern 11). The mix shift may be entirely the new variant absorbing demand.
+
+### Mix improvement — first-pass branches (routing tailwind)
+
+If the cascade confirms a mix change (e.g., HO traffic share grew and HO is higher-CVR), the question is "why did the higher-CVR segment grow?" Direction-symmetric to the routing exit investigation above:
+
+- Time the shift, source cut (paid channel, language, geo), URL impact. The finding is complete when you can name the gaining segment, the week the shift started, and the campaign/source that drove it.
+
+The decline-direction Mix patterns (Pattern 7) describe why traffic shifted *toward* lower-CVR MB. For improvements, the mirror question is why traffic shifted *toward* higher-CVR HO or paid channels — typically: campaign launched/scaled up, SEO ranking landed, affiliate brought higher-intent volume, marketing budget reallocated *to* this CE.
+
+---
+
 ## URL concentration — a cross-cutting check
 
 URL concentration is a legitimate hypothesis regardless of which funnel step is primary — it shapes both the mechanism and the DRI. Run the URL breakdown query from `context.md` (not the canonical L2+ query — that query does not produce `pct_of_lp`). Apply a majority-contributor filter: only include URLs that account for a meaningful share of CE LP traffic on the fixed segment — long-tail URLs produce high-variance rate estimates and should be treated as directional at best.
@@ -325,9 +381,9 @@ For each primary driver type, the URL breakdown answers a different question:
 
 A cross-cut is not about adding more dimensions — it is about avoiding a double-counting error. When two independent dimension cuts for the same funnel metric both show concentration, they may be describing the same users, not two independent findings. Run the intersection before reporting both as separate root causes.
 
-**Trigger rule:** When two dimension cuts for the same funnel metric both show a concentrated drop (≥8pp absolute or ≥20% relative in the leading segment), run the cross-cut before closing either branch as a leaf. If the concentrations overlap substantially (one cell dominates), the cross-cut becomes the leaf — not the two individual cuts. If they are independent (multiple distinct cells show drops), both findings hold and can be reported separately.
+**Trigger rule:** When two dimension cuts for the same funnel metric both show concentrated movement (≥8pp absolute or ≥20% relative in the leading segment, **in either direction — a drop in a decline RCA or a rise in an improvement RCA**), run the cross-cut before closing either branch as a leaf. If the concentrations overlap substantially (one cell dominates), the cross-cut becomes the leaf — not the two individual cuts. If they are independent (multiple distinct cells show concentrated movement), both findings hold and can be reported separately.
 
-**Threshold rationale:** 8pp absolute or 20% relative is roughly the point at which a dimension cut is large enough to explain the majority of a CE-level metric change. Below that threshold, the finding is directional — a cross-cut is useful but not required.
+**Threshold rationale:** 8pp absolute or 20% relative is roughly the point at which a dimension cut is large enough to explain the majority of a CE-level metric change. Below that threshold, the finding is directional — a cross-cut is useful but not required. The threshold and the cross-cut logic are identical regardless of direction; only the language around "drop" vs "rise" changes.
 
 ### Common cross-cuts by funnel step
 
@@ -353,6 +409,38 @@ Use the cross-cut query template in `context.md → "Cross-cut query template"` 
 - **Concentrations overlap (one cell dominates):** The two individual dimension findings describe the same users. Report the cross-cut cell as the leaf (e.g., "Android Mweb users on experience 36344"), not two separate findings. This is one root cause.
 - **Concentrations are independent (multiple distinct cells show drops):** The two mechanisms are genuinely separate pools. Report both, and note they were confirmed as non-overlapping via the cross-cut.
 - **One cell is too thin (< ~20 post-period users in the denominator):** Data is insufficient to confirm or deny overlap. Note the ambiguity in the report; do not assert independence.
+
+---
+
+## Slack signal classification — for Step 2b reconciliation
+
+Use this table when reading `<run_dir>/slack_context.md` at Step 2b check #9 of the SKILL.md process. Every signal worth keeping classifies into one of four patterns; rejected signals get a one-line note in the transcript and never enter the report.
+
+**Critical constraint:** Slack is consulted *only* at Step 2b — never during L0/L1/L2 investigation. Pattern classification is retrospective. The full process spec lives in `SKILL.md → Step 2b → check #9`; this section is the pattern-recognition reference.
+
+| Pattern | What the signal looks like | Where it surfaces in the report | Action required |
+|---|---|---|---|
+| **A — Direct corroboration** | Slack thread names the same mechanism, TGID, date, or segment as a finding already in findings.md | Source column in Hypotheses Explored table. **On declines with a DRI-bound action:** elevate the verdict subtext citation from `(corroborated ↗)` to `(per Author · date ↗)`. | No new query. Add citation; if applicable, elevate per the decline-corroboration rule. |
+| **B — Mechanism explanation** | Slack thread reveals *why* something happened (a deploy date, an assortment cap, a pricing lever, a content update, a TGID launch, an API migration) that explains a confirmed data finding | Layer 1 narrative weaving in the relevant callout question or verdict subtext, AND a row in the Section 3 Market Context block | No new query. Weave into narrative + add to Market Context table. |
+| **C — Reframing context** | Slack thread introduces a metric or timeframe *outside* the report's primary comparison (YoY, vs plan, macro shift) AND would change how a stakeholder acts or prioritises | Layer 2 Important Context callout-item in Section 1 (apply the four decision-changing tests in `report_structure.md`), AND a row in the Section 3 Market Context block. **Mandatory:** name the timeframe in the same sentence when it differs from pre/post. | No new query. Add Important Context item + Market Context row + apply timeframe-citation rule. |
+| **D — Testable gap** | Slack thread names a specific causal mechanism, TGID, date, or operational event the investigation did not address. Must pass three filters: (a) specific; (b) within window or causally upstream; (c) about this CE or its market | Result of the one query becomes a regular finding in Section 3, cited inline `(prompted by Author · date ↗)` | Run one query maximum. Update tree map to CONFIRMED / RULED OUT / DATA GAP. Update findings.md if the finding changes. |
+| **Reject** | Vague ("things are slow"), symptom-only ("CVR is down"), or fails the gap filters | Transcript only — `"Slack signal '[summary]' — not pursued: [reason in 5 words]."` Does not enter the report. | None. |
+
+**High-value gap categories for Pattern D** — these are the kinds of Slack signals worth pursuing as a Pattern D query, because they rarely surface in the funnel table directly but often explain residual unexplained C2A/C2O/LP2S movement:
+
+- **MB assortment changes** — cap raised/lowered, TGIDs added/removed from MB visible set
+- **Pricing levers** — last-minute discount applied, promo code introduced, fee structure change, base price adjustment for a TGID
+- **Content/title updates** on top TGIDs (name change, highlights update, image refresh)
+- **Product restructures** — TGID consolidation, variant split, taxonomy update
+- **Supplier changes** — API migration (e.g., 1way2italy → Bokun), VID rate sheet update, vendor moved to manual FF mode, CR% intervention
+- **Catalogue events** — TGID launched, TGID disabled, multi-DMC setup change
+
+For each of these, a single query against the funnel/catalogue/inventory tables is usually sufficient to confirm or rule out the mechanism (Pattern D's one-query limit).
+
+**Pattern selection is sequential when the signal could fit multiple:**
+- If the signal corroborates an existing data finding (Pattern A applies), classify as A even if the signal also provides mechanism detail (which would be B). Saves a Layer-1 weave and keeps the data finding primary.
+- If the signal both reframes and explains a mechanism, classify as C if the reframing changes priority/team; otherwise B.
+- If you're tempted to classify a signal as multiple patterns, the signal probably needs to be split into two thread-references with separate handling.
 
 ---
 
@@ -508,6 +596,31 @@ Before diagnosing any funnel step: if mix is dominant, the story is about traffi
 
 ---
 
+## Pattern 11: Catalogue change — TGID launched, disabled, or restructured (bidirectional)
+
+A TGID launching or being removed within the analysis window can produce funnel-step movement in either direction. Catalogue change is a first-class hypothesis whenever the experience-level breakdown shows a top experience whose checkout volume changed substantially (≥20% relative or accounting for ≥10% of the net CE-level move) pre vs post. **Data-driven trigger** — no Slack input required to test this; query `dim_experience_management.experience_created_at` (or first-appearance in `product_rankings_features`) directly.
+
+**Decline direction — TGID cannibalises or disappears:**
+
+1. **New TGID cannibalises higher-CVR variants.** A new mid-CVR variant launches and absorbs traffic from higher-CVR siblings, depressing the CE-level rate. Signal: the new TGID's checkout share grew while one or more sibling TGIDs lost share, and the new TGID has lower native C2O or S2C than the siblings.
+2. **High-CVR TGID disabled.** An experience went `variant_status != 'Active'` mid-window, removing high-converting demand from the catalogue. Signal: one TGID's checkout volume fell to zero or near-zero mid-post, others held.
+3. **Variant proliferation diluting clarity.** Multiple similar TGIDs added without clear differentiation create decision paralysis at the select page. Pattern 4 covers the assortment angle in detail.
+
+**Improvement direction — TGID launched well or restructure landed:**
+
+1. **New TGID adds incremental volume + CVR.** A new high-CVR variant launches and grows the catalogue at favourable rates. Signal: the new TGID's checkout share grew, sibling TGIDs roughly held (not cannibalisation), and the new TGID has higher native C2O.
+2. **New TGID cannibalises lower-CVR variants.** A new variant absorbs traffic from lower-CVR siblings, *lifting* the CE-level rate. Signal: gaining TGID has higher C2O than the displaced siblings. Asymmetric mirror of decline pattern 1.
+3. **Catalogue restructure / MB assortment cap.** Marketing or Growth caps the visible MB assortment to a smaller, higher-CVR set (e.g., MB capped at 8 products). Concentrating traffic onto the highest-CVR TGIDs lifts CE-level rates without changing any per-TGID flow. Often layered with content/title updates on the surviving TGIDs.
+
+**How to test (data-driven):**
+- Run the catalogue-change query (`context.md → "Catalogue change query"`) to identify TGIDs whose first/last appearance is inside the window, and TGIDs whose `variant_status` flipped during the window.
+- Cross-reference with the experience-level checkout breakdown — does a launching TGID line up with a major share-change?
+- If a TGID launched mid-window: scope the timeline. Did the C2O/CVR inflection align with the launch date? If yes, catalogue change is confirmed as a mechanism (Pattern 11 leaf). If the inflection predates the launch, the new TGID is incidental.
+
+**Historical reference (improvement direction):** CE 1223 Pompeii (May 2026) — new Skip-the-line Guided Tour with Archaeologist (TGID 25518) more than doubled checkout volume; MB assortment capped at 8 products on May 7; combined catalogue restructure explained part of the +0.23pp structural CVR delta.
+
+---
+
 ## Pattern 10: Drop concentrated in specific experiences at S2C
 
 **Hypotheses:**
@@ -543,3 +656,4 @@ Before diagnosing any funnel step: if mix is dominant, the story is about traffi
 | c015 | 2026-05-13 | Added URL-level analysis to LP2S investigation and fixed the broken URL concentration cross-cutting check.
 | c016 | 2026-05-14 | S2C first-pass branches — added secondary-driver scoping block at the top of the section, aligned with SKILL.md c023. When S2C is a secondary driver: run the fixed-segment aggregate first; if flat or improved outside the fixed segment, close as RULED OUT; if declined within the fixed segment but directionally explained by the primary finding, close as CONFIRMED with one-line explanation; only open the full first-pass branch set if S2C shows an independent decline not explained by the primary mechanism. Prevents unnecessary dimension cuts on secondary steps while ensuring the coverage requirement from c023 is met. | (1) LP2S first-pass branches: added `page_url` × LP2S rate and volume as an explicit parallel first-cut dimension — checks both volume shift between URLs (routing story) and rate change on specific URLs (page-specific story) independently; majority-contributor filter note added. Updated "if a dimension concentrates" follow-up to reflect that when URL itself concentrates at the first cut, it is the direct finding, not a secondary drill-down. (2) URL concentration cross-cutting check: removed broken `summary.json` URL breakdown reference (that field does not exist). Replaced with: run the canonical L2+ query with `page_url` as dimension. Rewrote sub-bullets for Mix/LP2S/S2C/C2O to be operationally executable and conceptually accurate — specifically, clarified that `page_url` in S2C context is the session-entry URL (landing page), not the select-page URL, so S2C differences by URL reflect user composition (intent) rather than select-page UX. C2O sub-bullet updated to flag URL as a weak lens for checkout-stage drops. |
 | c017 | 2026-05-08 | URL concentration cross-cutting check: updated the query pointer from "Run the canonical L2+ query from `context.md` with `page_url` as the dimension" to "Run the URL breakdown query from `context.md` (not the canonical L2+ query — that query does not include `pct_of_lp`)". Reason: the URL concentration section explicitly requires both volume share and rate checks to distinguish routing vs performance stories. The canonical query only answers the rate question. Without `pct_of_lp`, Claude would construct the totals CTE on the fly — the class of error flagged in the insights report. The dedicated query (added to context.md c026) is the correct reference. |
+| c018 | 2026-05-22 | Bidirectional + Slack four-pattern model added. **(1) Cross-cut trigger rule rephrased** from "concentrated drop" to "concentrated movement (in either direction)" — same threshold (8pp absolute / 20% relative), same logic, broader language so improvement RCAs trigger the cross-cut too. **(2) New "Improvement direction — first-pass branches" section** between the C2O decline branches and URL concentration — covers LP2S/S2C/C2O/Mix in the positive direction with their own dimension cuts. Catalogue change and supply expansion are direction-symmetric counterparts of the decline patterns. **(3) New "Pattern 11: Catalogue change (bidirectional)"** — TGID launch, removal, or restructure as a first-class hypothesis in both directions. Data-driven trigger via experience-level breakdown + `dim_experience_management.experience_created_at` (no Slack input required). Historical reference added for CE 1223 Pompeii (Pattern 11 improvement direction). **(4) New "Slack signal classification" section** between URL concentration and Pattern 1 — reference table mapping the four patterns (A/B/C/D) plus Reject to where each surfaces in the report and what action is required. Lists high-value gap categories for Pattern D (assortment changes, pricing levers, content updates, supplier changes, catalogue events). Reaffirms that Slack reconciliation is retrospective only — never during L0/L1/L2. Cross-references to SKILL.md Step 2b check #9 and report_structure.md Slack integration section. |

@@ -370,7 +370,24 @@ The cascade is complete and the fixed segment is declared. Now use the Shapley
 step identified at L0 to direct the first set of branches. Start with the
 primary funnel step — LP2S if LP2S dominated, S2C if S2C dominated, C2O if
 C2O dominated. Every query from this point carries the fixed segment filters. Each branch is a specific, falsifiable hypothesis about why
-that funnel step dropped in the fixed segment.
+that funnel step dropped — **or rose** — in the fixed segment.
+
+**Direction matters for branch selection.** When the primary step moved
+positively (CVR improvement RCAs), the default branches are different from the
+decline patterns. Consult `hypothesis.md → "Improvement direction — first-pass
+branches"` for the parallel branch sets. The data-driven patterns (catalogue
+change, supply expansion, pricing/promo levers, channel quality improvement)
+are direction-sensitive: a fall in `days_to_first_available_date` is
+improvement-relevant; a rise is decline-relevant. The skill is bidirectional
+by design.
+
+**Catalogue change is a first-class hypothesis in both directions.** When
+the experience-level breakdown shows a top experience whose checkout volume
+changed substantially pre/post (≥20% relative or accounting for ≥10% of the
+net change), test whether a TGID launched or was disabled within the window.
+Use the catalogue-change query in `context.md → "Catalogue change query"` —
+no Slack input required to trigger this. It is a data-driven first-pass
+branch, not a retrospective check after Slack reconciliation.
 
 A branch is a hypothesis, not an observation. Name the mechanism, the segment
 or experience, and the pattern you would expect if it were true:
@@ -494,7 +511,19 @@ SQL
 Once a specific locus is confirmed (URL, experience, device, page type, or any
 concentrated cross-cut), pull session recordings using the Mixpanel MCP
 (`Get-User-Replays-Data`). Any single confirmed dimension is sufficient — you
-do not need all dimensions locked simultaneously.
+do not need all dimensions locked simultaneously. **Applies to both directions
+of CVR movement** — decline loci and improvement loci both warrant recordings,
+though what you look for differs:
+
+- **Decline locus:** look for the failure pattern — an empty date picker, a
+  broken form field, a slow load, a confusing layout change. The recording
+  converts "S2C dropped on experience X" into "users consistently encountered
+  an empty calendar."
+- **Improvement locus:** look for confirmation that the flow is smooth, and
+  surface any new UI element introduced since the prior period (new badge,
+  reordered variants, new pricing display) that could be a structural lever.
+  Recordings on a working flow are not noise — they verify the data finding
+  AND surface what changed.
 
 Recordings move a finding from "consistent with" to "directly observed." They
 are not optional once a locus exists.
@@ -589,26 +618,65 @@ Save to: `<run_dir>/findings.md`
 9. **Slack context reconciliation** — read `<run_dir>/slack_context.md`. If the
    file does not exist yet, wait briefly (the sub-agent may still be running);
    if still missing after a short wait, log "Slack context unavailable — skipped"
-   and proceed. For each signal in the file, do exactly one of three things:
+   and proceed. **Slack is consulted only at this point** — never during L0/L1/L2
+   investigation. The fire-and-forget pattern is deliberate: the data-driven
+   investigation must reach its own leaf before Slack is read, so Slack
+   corroborates or surprises a *completed* picture rather than steering branch
+   selection. For each signal in the file, classify into one of four patterns
+   and route to the report per `report_structure.md → "Slack integration &
+   link-to-table styling"`:
 
-   **Corroborate** — the signal directly names the same mechanism, TGID, date,
-   or segment as a finding already in findings.md. Add the Slack thread link to
-   the Source column of the evidence inventory row it supports. Format:
-   `[Author · date](slack-link)`.
+   **Pattern A — Direct corroboration.** The signal directly names the same
+   mechanism, TGID, date, or segment as a finding already in findings.md. Add
+   the Slack thread link to the Source column of the evidence inventory row it
+   supports. Format: `[Author · date](slack-link)`. **For declines specifically:**
+   when Slack corroborates a CONFIRMED finding whose action card is going to a
+   DRI, *elevate* the citation in the relevant Section 3 verdict subtext from
+   bare `(corroborated ↗)` to a named source `(per [Author · date] ↗)` — this
+   moves the finding from "we measured it" to "we measured it AND the
+   BDM/Supply/Marketing team has independent corroboration."
 
-   **Test a gap** — the signal names a specific causal mechanism, TGID, date, or
-   operational event that the investigation did not address. Only pursue if it
-   passes all three filters: (a) specific — names a date, mechanism, or TGID,
-   not just "things are slow"; (b) within the investigation window or causally
-   upstream of it; (c) about this CE or its market category, not generic
-   commentary. If it passes: run one query, update the tree map as CONFIRMED /
-   RULED OUT / DATA GAP, update findings.md if the finding changes. Maximum one
-   query per gap signal.
+   **Pattern B — Mechanism explanation.** The signal names a specific causal
+   mechanism (a deploy, an assortment cap, a pricing lever, a content update, a
+   supplier API migration, a TGID launch) that explains a finding the
+   investigation reached without naming the *why*. Route into Layer 1 narrative
+   weaving in the relevant callout/verdict subtext AND surface as a row in the
+   Section 3 Market Context block. No second query needed if the data-driven
+   finding already exists.
 
-   **Reject** — the signal does not pass the gap filters, or only confirms the
-   symptom ("CVR is down", "bookings dropped"). Write one line in the transcript:
-   "Slack signal '[summary]' — not pursued: [reason in 5 words]." Do not
-   include rejected signals in the report.
+   **Pattern C — Reframing context.** The signal introduces a metric or
+   timeframe outside the report's primary comparison (YoY GBV, vs plan, macro
+   demand shift) and would cause a stakeholder to act or prioritise differently.
+   Route to a Layer 2 Important Context callout-item in Section 1 (high bar —
+   apply the four decision-changing tests in `report_structure.md`) AND a row
+   in the Section 3 Market Context block. **Mandatory:** when the Slack
+   timeframe differs from the report's pre/post, the citation must name the
+   timeframe explicitly in the same sentence (no silent timeframe switches).
+
+   **Pattern D — Testable gap.** The signal names a specific causal mechanism,
+   TGID, date, or operational event that the investigation did not address.
+   Only pursue if it passes all three filters: (a) specific — names a date,
+   mechanism, or TGID, not just "things are slow"; (b) within the investigation
+   window or causally upstream of it; (c) about this CE or its market category,
+   not generic commentary. If it passes: run one query, update the tree map as
+   CONFIRMED / RULED OUT / DATA GAP, update findings.md if the finding changes,
+   and cite the prompt inline `(prompted by [Author · date] ↗)`. Maximum one
+   query per gap signal. High-value gap categories to recognise: operational
+   events such as MB assortment changes (cap raises/lowers, new TGID launches,
+   TGID removals), pricing levers (5% last-minute discount, promo code
+   introduction, fee structure change), content/title updates on top TGIDs,
+   product restructures, supplier API migrations, vendor moves (manual FF
+   mode, rate-sheet changes). These categories rarely surface in the funnel
+   table directly but often explain residual unexplained C2A/C2O/LP2S movement.
+
+   **Reject** — the signal does not pass any of the above patterns, or only
+   confirms the symptom ("CVR is down", "bookings dropped"). Write one line in
+   the transcript: "Slack signal '[summary]' — not pursued: [reason in 5
+   words]." Do not include rejected signals in the report.
+
+   **One citation per concept** — if the same Slack thread is the source for
+   three sentences in a paragraph, cite it once at the most natural anchor;
+   don't re-cite the same source line after line.
 
 Once all open items are resolved or explicitly accepted, proceed to Step 3.
 
@@ -680,7 +748,12 @@ Evaluation → [EVAL_FILE]
 [Total X/35] · Strongest: [theme name] ([score]) · Watch: [theme name] ([score])
 ```
 
-Do not narrate the full evaluation in chat. The file is the record.
+**These two lines are the ONLY chat output at the end of the run.** Do not
+narrate the full evaluation, summarise the report, recap the Slack
+reconciliation, or provide a "highlights" block in chat. The HTML report, the
+findings.md, the transcript.md, and the evaluation.md are the records — the
+chat footer just points the user to them. If you find yourself wanting to add
+context after the two lines, that context belongs in one of the files instead.
 
 Each run folder in `~/Documents/RCA skill/Test Runs/` accumulates three files:
 `report.html`, `transcript.md`, and `evaluation.md`. Evaluations are the signal
@@ -739,4 +812,5 @@ not generic "investigate further" text.
 | c025 | 2026-05-14 | Step 2b "Specific checks before proceeding" rewritten as a numbered 5-item checklist: (1) weekday composition, (2) seasonal/calendar event claims must be paired with a data signal (cross-reference to report_structure.md Styling rule 4), (3) every number has a named source, (4) every numeric recommendation verified with arithmetic, (5) backlogged branches must be closed as DATA GAP. Replaces the previous unordered prose list. |
 | c026 | 2026-05-20 | Cross-cut concept added as a first-class investigation step. hypothesis.md gains "Dimension cross-cut — when two cuts both concentrate" section with a trigger rule (≥8pp absolute or ≥20% relative), enumerated common cross-cuts by funnel step (A2O, S2C, LP2S, C2A), and a three-outcome interpretation guide. context.md gains "Cross-cut query template" section with the generic 2-dimension query, a funnel step substitution table, and a worked A2O example (device_type × experience_id). SKILL.md gains check 8 in Step 2b: "Cross-cut run when two cuts both concentrated." |
 | c028 | 2026-05-21 | Slack context layer added. A fire-and-forget sub-agent is spawned at the top of Step 2 (after summary.json is read, before the investigation starts). It runs three searches — CE-specific global (pre_start − 14 days → post_end), market channel read (pre_start → post_end), and #tf-bugalert (post_start − 2 days → post_end) — and writes categorised signals to `<run_dir>/slack_context.md` in four buckets: Platform/Bug, Supply/Inventory, Campaign/Traffic, CE-specific mentions. The main agent never waits for it. Step 2b gains check #9 (Slack context reconciliation): read slack_context.md after findings.md is written; corroborate confirmed findings with thread links, test specific gap signals with one query max, reject vague or symptom-only signals explicitly. report_structure.md gains optional 5th "Source" column in hypotheses explored table (only rendered when a corroboration exists) and inline citation format for analysis block subtext. Sub-agent instruction set lives in `references/slack_context_guide.md`. |
+| c029 | 2026-05-22 | Slack reconciliation expanded into four-pattern model and made bidirectional. Step 2b check #9 rewritten: signals classified into Pattern A (direct corroboration), B (mechanism explanation), C (reframing context), D (testable gap), or rejected. Reaffirms that Slack is consulted **only** at this point — never during L0/L1/L2 — the fire-and-forget pattern is deliberate so Slack doesn't steer branch selection. Pattern A on declines gets a citation-elevation rule (bare `(corroborated ↗)` becomes named `(per Author · date ↗)` when the action is going to a DRI). Pattern B routes to Layer 1 narrative weaving + Section 3 Market Context block. Pattern C routes to a Layer 2 Important Context callout-item in Section 1 (high bar — four decision-changing tests). Pattern D requires the timeframe-citation rule when the Slack metric differs from the report's pre/post. Added high-value gap categories list (operational events: assortment changes, pricing levers, content updates, product restructures, API migrations, vendor moves) — Pattern D recognises these as good retrospective query candidates. Added "one citation per concept" rule. Step 4 footer hardened: the two output lines are the only chat output — no narrative summary, no Slack recap, no highlights block. Session recordings rule extended explicitly to improvement loci (decline = look for failure; improvement = verify smooth flow + surface new UI elements). L2+ section gains direction-sensitive language and a pointer to `hypothesis.md → "Improvement direction — first-pass branches"` when CVR improved. Catalogue change called out as a first-class data-driven hypothesis (no Slack input required to trigger). |
 | c027 | 2026-05-21 | First-pass batch parallelised via sub-agents. "Run all branches within a level in parallel" replaced with a five-step spawning protocol: (1) write SQL for every cut before spawning, (2) open transcript section, (3) spawn one sub-agent per cut — each receives only SQL + output path + output contract (no reference files, context isolation enforced), (4) wait for all sub-agents before reading any result, (5) fill transcript and synthesise from the combined picture. Batch JSON files saved to `<run_dir>/batch_<cut_name>.json`. Failure handling: missing or empty JSON = DATA PULL FAILURE, log and continue, do not re-query inline. Applies to the first-pass branch set only; deeper levels (L2, L3) remain sequential. |
