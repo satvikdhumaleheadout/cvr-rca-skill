@@ -120,6 +120,8 @@ channel's primary landing pages? Those are what dropped.
 
 ---
 
+**Perf-audit background context (Level 2 and Level 3 exits).** When the cascade exits via mix at Level 2 (Paid/Organic) or Level 3 (channel within Paid), the perf-audit sub-agent runs in parallel with the tiered investigation below — spawned right after the exit level is declared (see `SKILL.md → "Perf-audit context — fire and forget"`). The tiers (timing → sub-segment cut → URL impact) still run as the primary path. At Step 2b the perf-audit summary often names the campaign-level *why* behind the mix shift: a campaign paused on a specific date, SIS lost to rank vs budget, tROAS self-suppression tightening traffic volume, or budget exhaustion. Pattern B in check #10 routes those findings into Layer 1 narrative and the Section 3 Market Context block without a second query — the campaign event explains itself once timed and named.
+
 For all three levels: the finding is complete when you can name the shift week,
 the specific sub-segment that drove it, and the affected page URLs. Do not go
 further into funnel analysis — the conversion rates within the affected segment
@@ -146,6 +148,8 @@ select page.
   the dedicated query from `context.md → "Geo vs Non-Geo"` — it requires a
   CE country pre-step and top-5 CTE logic; do not use the canonical L2+ query
   for this cut.
+
+**Paid fixed segment — perf-audit background context.** If the fixed segment is Paid, a perf-audit sub-agent is running in parallel (spawned at the end of the cascade — see `SKILL.md → "Perf-audit context — fire and forget"`). Do not consult it during the dimension-cut phase. Dimension findings must be reached independently so the perf-audit verdict corroborates or surprises a completed picture rather than steering branch selection. At Step 2b the verdict folds in via the four-pattern routing in check #10: traffic quality IMPROVED corroborates a page-driven leaf with high confidence; DEGRADED reframes the root cause to include a traffic-quality contributor alongside the page finding; campaign-level events (pause, tROAS suppression) explain the *why* behind the dimension findings without re-querying.
 
 **If a dimension concentrates:** run the intersection (e.g., French × mobile), then drill to `page_url` within that segment to identify the actionable pages. If `page_url` itself concentrates at the first cut, the URL is the direct finding — identify what changed about those pages (template, listed experiences, traffic composition from that entry point). A finding is not complete until you can say "these specific URLs are where LP2S dropped, here are the user counts."
 

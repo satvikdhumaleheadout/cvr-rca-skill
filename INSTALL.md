@@ -83,7 +83,49 @@ where analysis outputs will land."
 
 ---
 
-## Step 5 — Confirm
+## Step 5 — Optional: install the perf-audit companion skill
+
+The CVR-RCA skill can spawn a sub-agent that runs a separate **perf-audit
+skill** when the cascade fixes on Paid. It enriches the root cause with
+traffic-quality signals (SIS, CPC trends, campaign pauses, tROAS suppression)
+that CVR-RCA's funnel-table data cannot see. CVR-RCA runs fully without it —
+this step is optional.
+
+Check whether the user already has it:
+
+```bash
+if [ -d "$HOME/.perf-audit-skill" ] || [ -d "$HOME/Documents/perf-audit-skill" ]; then
+  echo "perf-audit found"
+else
+  echo "perf-audit not found"
+fi
+```
+
+If not found, ask the user: "Install the perf-audit companion skill at
+`~/.perf-audit-skill`? It's optional but unlocks paid-traffic enrichment for
+CVR-RCAs that route through Paid. (y/n)"
+
+If they say yes:
+
+```bash
+curl -L https://github.com/aaradhyaraiHO/perf-audit-skill/archive/refs/heads/main.zip \
+  -o /tmp/perf-audit-install.zip
+unzip -q /tmp/perf-audit-install.zip -d /tmp/
+rm -rf ~/.perf-audit-skill
+mv /tmp/perf-audit-skill-main ~/.perf-audit-skill
+rm /tmp/perf-audit-install.zip
+```
+
+Tell the user: "Installed perf-audit skill to `~/.perf-audit-skill/`. CVR-RCA
+will auto-detect it whenever the cascade fixes on Paid."
+
+If they say no, tell them: "Skipped. CVR-RCA will log `Perf-audit skill not
+installed — skipped` and continue without enrichment. You can install it
+later by re-running this installer."
+
+---
+
+## Step 6 — Confirm
 
 ```bash
 cat ~/.cvr-rca/VERSION

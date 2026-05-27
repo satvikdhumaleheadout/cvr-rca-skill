@@ -364,6 +364,98 @@ Declare the outcome in the transcript before opening any funnel branches:
 
 Log the cascade as its own L1 section in the tree map.
 
+### Perf-audit context — fire and forget (Paid-side only)
+
+If the cascade fixed on Paid — either via a conversion path that included Paid
+at Level 2 or Level 3, or via a mix exit at Level 2 (Paid/Organic shift) or
+Level 3 (channel shift within Paid) — spawn the perf-audit sub-agent now and
+continue immediately. The sub-agent runs in the background. You will read its
+output at Step 2b check #10, not before. **Do not consult it during the L2+
+investigation** — the data-driven branches must reach their own leaves before
+the perf-audit verdict is read, so it corroborates or surprises a completed
+picture rather than steering branch selection. Mirrors the Slack pattern.
+
+Skip the spawn when the fixed segment is Organic, or when the perf-audit skill
+is not installed (path resolution fails — see below).
+
+**Path resolution.** The perf-audit skill is distributed separately at
+`https://github.com/aaradhyaraiHO/perf-audit-skill`. Look for its `SKILL.md`
+in this order, taking the first match that exists:
+
+1. `$PERF_AUDIT_SKILL_PATH` (env var, if set)
+2. `$HOME/.perf-audit-skill/SKILL.md` (companion install — see `INSTALL.md`)
+3. `$SKILL_DIR/../perf-audit-skill/SKILL.md` (sibling directory)
+4. `$HOME/Documents/perf-audit-skill/SKILL.md` (legacy local default)
+
+If none resolve, log one line in the transcript — `Perf-audit skill not
+installed — skipped (install at https://github.com/aaradhyaraiHO/perf-audit-skill)` —
+and proceed to L2+. CVR-RCA runs fully without it.
+
+**Spawn block** (use the resolved path as `<perf_audit_skill_md>`):
+
+```
+Sub-agent role: paid-performance auditor
+
+Skill: read "<perf_audit_skill_md>" and follow its instructions. The skill is
+self-contained — its bundled references and scripts sit beside that file.
+
+Pass:
+  ce_name      → meta.combined_entity_name
+  ce_id        → meta.ce_id
+  pre_start    → pre-period start date
+  pre_end      → pre-period end date
+  post_start   → post-period start date
+  post_end     → post-period end date
+  run_dir      → <run_dir>
+  trigger      → "conversion-path" or "routing-exit-L2" or "routing-exit-L3"
+
+Run the full perf-audit using the pre/post windows above as the comparison
+windows. When complete, write TWO files:
+
+1. Full report → <run_dir>/perf_audit_report.md (verbatim perf-audit output)
+
+2. Structured summary → <run_dir>/perf_audit_summary.md in EXACTLY this shape
+   (use literal "n/a" if a field can't be determined):
+
+   ## Perf-Audit Insight Summary
+
+   **Overall verdict:** HEALTHY | WARNING | CRITICAL | DATA GAP
+
+   **Traffic quality:**
+   - SIS trend: stable | up X pp | down X pp (rank-lost X%, budget-lost X%)
+   - CPC trend: stable | up X% | down X%
+   - Paid CVR trend: stable | up X pp | down X pp
+   - Assessment: IMPROVED | DEGRADED | STABLE | DATA GAP
+
+   **Campaign status:**
+   - Paused/dormant campaigns in post-period: none | <list with dates>
+   - tROAS self-suppression (ROI up + clicks down): yes | no
+   - Budget exhaustion (spend/budget ≥ 0.95): yes | no
+
+   **Key finding (one sentence):** [the single most important insight for the
+   CVR-RCA — e.g., "Traffic quality improved (SIS +3pp, CPC quality lens
+   positive) — funnel drop is page-driven, not traffic-driven."]
+
+   **Surprise / new hypothesis (optional):** [if perf-audit surfaced
+   something CVR-RCA's dimension cuts wouldn't catch — a creative rotation,
+   an auction-insights competitor surge, a Performance Max audience
+   expansion, a campaign paused on a specific date — name it here as a
+   one-sentence hypothesis with a date if available. Leave blank if nothing
+   surprising.]
+
+Return only the contents of perf_audit_summary.md as your final message; the
+full report is already on disk.
+```
+
+The sub-agent receives no CVR-RCA files (SKILL.md, hypothesis.md, context.md).
+It only gets the perf-audit skill path, the CE, and the date windows. It runs
+in its own context — context isolation is required so it diagnoses the paid
+side independently rather than reasoning about the CVR-RCA investigation.
+
+If the sub-agent returns `DATA GAP: no campaigns` (the CE has no active Google
+Ads campaigns in the windows), that is a legitimate outcome — not a failure.
+Step 2b will note it in findings and move on.
+
 ### L2+ — Branch and descend (all queries filtered to fixed segment)
 
 The cascade is complete and the fixed segment is declared. Now use the Shapley
@@ -679,6 +771,76 @@ Save to: `<run_dir>/findings.md`
    three sentences in a paragraph, cite it once at the most natural anchor;
    don't re-cite the same source line after line.
 
+10. **Perf-audit reconciliation** (Paid-side only) — if the perf-audit sub-agent
+    was spawned (cascade fixed on Paid), read `<run_dir>/perf_audit_summary.md`.
+    If the file does not exist yet, wait briefly (the perf-audit may still be
+    running); if still missing after a short wait, log "Perf-audit unavailable —
+    skipped" and proceed. **Perf-audit is consulted only at this point** — same
+    rationale as Slack: the data-driven branches must reach their own leaves
+    first, so the perf-audit verdict corroborates or surprises a completed
+    picture rather than steering branch selection.
+
+    Add a dedicated evidence entry to findings.md:
+
+    ```markdown
+    ## Evidence: Paid traffic quality (perf-audit)
+    - Verdict: [IMPROVED / DEGRADED / STABLE / DATA GAP]
+    - Key metrics: SIS [X→Y], CPC [X→Y], Paid CVR [X→Y]
+    - Campaign issues: [none / <list>]
+    - Implication: [one sentence on what this means for the root cause]
+    - Source: <run_dir>/perf_audit_summary.md (full report at perf_audit_report.md)
+    ```
+
+    Then route the verdict using the same four-pattern framing as Slack:
+
+    **Pattern A — Direct corroboration.** Perf-audit's traffic-quality
+    assessment aligns with a leaf already in findings.md. Example: dimension
+    cuts located the LP2S drop on a specific URL set, and perf-audit reports
+    `Assessment: IMPROVED` — high confidence the drop is page-driven, not
+    traffic-driven. Note the corroboration in the leaf's evidence line and in
+    the Section 3 verdict subtext.
+
+    **Pattern B — Mechanism explanation.** Perf-audit names a specific
+    campaign-level event (a campaign paused on a date, tROAS self-suppression,
+    budget exhaustion) that explains *why* the data-driven finding looks the
+    way it does. Common with routing-exit triggers — CVR-RCA timed the mix
+    shift, perf-audit names the campaign that caused it. Weave into Layer 1
+    narrative in the relevant callout subtext and surface as a row in the
+    Section 3 Market Context block. No second query needed.
+
+    **Pattern C — Reframing context.** Perf-audit reports `Assessment:
+    DEGRADED` while the CVR-RCA leaf is page/product-side. Both can be true,
+    but the report's root cause callout must reflect both contributors —
+    raise it to a Layer 2 Important Context callout-item in Section 1 with
+    the perf-audit verdict named explicitly. Action cards may need to split:
+    one to the page/product owner, one to the bidding/budget owner.
+
+    **Pattern D — Testable gap (surprise).** Perf-audit's "Surprise / new
+    hypothesis" field is non-empty and names something the data-driven
+    investigation did not address. Only pursue if the hypothesis is
+    CVR-RCA-testable (a date, a URL set, a segment that can be queried in the
+    funnel table). If testable: run one query, update the tree map as
+    CONFIRMED / RULED OUT / DATA GAP, update findings.md if the leaf changes.
+    Maximum one query per surprise. If the surprise names a campaign-level
+    event that CVR-RCA can't test (auction-insights competitor surge, creative
+    rotation effect), treat it as Pattern B — narrate without re-querying.
+
+    **Reject** — verdict is STABLE and no campaign issues and no surprise.
+    Note in findings: "Perf-audit ran; traffic quality stable, no campaign
+    issues — finding stands on data-driven evidence." This is a legitimate
+    outcome and worth recording so the reader sees the check was performed.
+
+    **DATA GAP outcomes** — if the sub-agent returned `DATA GAP: no campaigns`
+    or `Verdict: DATA GAP`, record that in findings as the implication and do
+    not infer traffic quality either way. Treat it like any other DATA GAP
+    branch — the absence of evidence is not evidence.
+
+    The perf-audit verdict (or its absence) must be reflected in the root cause
+    callout of the final report whenever it changes the interpretation — i.e.,
+    Pattern A, B, or C. For Pattern D, the surprise either gets folded into a
+    leaf or rejected; either way it leaves a trail in the tree map. Reject and
+    DATA GAP outcomes get a single line in findings and no special callout.
+
 Once all open items are resolved or explicitly accepted, proceed to Step 3.
 
 ---
@@ -815,3 +977,4 @@ not generic "investigate further" text.
 | c028 | 2026-05-21 | Slack context layer added. A fire-and-forget sub-agent is spawned at the top of Step 2 (after summary.json is read, before the investigation starts). It runs three searches — CE-specific global (pre_start − 14 days → post_end), market channel read (pre_start → post_end), and #tf-bugalert (post_start − 2 days → post_end) — and writes categorised signals to `<run_dir>/slack_context.md` in four buckets: Platform/Bug, Supply/Inventory, Campaign/Traffic, CE-specific mentions. The main agent never waits for it. Step 2b gains check #9 (Slack context reconciliation): read slack_context.md after findings.md is written; corroborate confirmed findings with thread links, test specific gap signals with one query max, reject vague or symptom-only signals explicitly. report_structure.md gains optional 5th "Source" column in hypotheses explored table (only rendered when a corroboration exists) and inline citation format for analysis block subtext. Sub-agent instruction set lives in `references/slack_context_guide.md`. |
 | c029 | 2026-05-22 | Slack reconciliation expanded into four-pattern model and made bidirectional. Step 2b check #9 rewritten: signals classified into Pattern A (direct corroboration), B (mechanism explanation), C (reframing context), D (testable gap), or rejected. Reaffirms that Slack is consulted **only** at this point — never during L0/L1/L2 — the fire-and-forget pattern is deliberate so Slack doesn't steer branch selection. Pattern A on declines gets a citation-elevation rule (bare `(corroborated ↗)` becomes named `(per Author · date ↗)` when the action is going to a DRI). Pattern B routes to Layer 1 narrative weaving + Section 3 Market Context block. Pattern C routes to a Layer 2 Important Context callout-item in Section 1 (high bar — four decision-changing tests); how to phrase the citation when the Slack timeframe differs from the report's pre/post is a styling concern handled in `report_structure.md → "Timeframe-citation rule"` (SKILL.md only points to it; the spec itself lives in the styling file). Added high-value gap categories list (operational events: assortment changes, pricing levers, content updates, product restructures, API migrations, vendor moves) — Pattern D recognises these as good retrospective query candidates. Added "one citation per concept" rule. Step 4 footer hardened: the two output lines are the only chat output — no narrative summary, no Slack recap, no highlights block. Session recordings rule extended explicitly to improvement loci (decline = look for failure; improvement = verify smooth flow + surface new UI elements). L2+ section gains direction-sensitive language and a pointer to `hypothesis.md → "Improvement direction — first-pass branches"` when CVR improved. Catalogue change called out as a first-class data-driven hypothesis (no Slack input required to trigger). |
 | c027 | 2026-05-21 | First-pass batch parallelised via sub-agents. "Run all branches within a level in parallel" replaced with a five-step spawning protocol: (1) write SQL for every cut before spawning, (2) open transcript section, (3) spawn one sub-agent per cut — each receives only SQL + output path + output contract (no reference files, context isolation enforced), (4) wait for all sub-agents before reading any result, (5) fill transcript and synthesise from the combined picture. Batch JSON files saved to `<run_dir>/batch_<cut_name>.json`. Failure handling: missing or empty JSON = DATA PULL FAILURE, log and continue, do not re-query inline. Applies to the first-pass branch set only; deeper levels (L2, L3) remain sequential. |
+| c030 | 2026-05-22 | Perf-audit companion-skill integration. When the cascade fixes on Paid (conversion path at L2/L3, or routing exit at L2/L3), spawn the perf-audit sub-agent at the end of the cascade and continue immediately — mirrors the Slack fire-and-forget pattern. Sub-agent runs the standalone perf-audit skill ([aaradhyaraiHO/perf-audit-skill](https://github.com/aaradhyaraiHO/perf-audit-skill)) with the CE name and pre/post date windows; returns a structured summary at `<run_dir>/perf_audit_summary.md` and the full report at `<run_dir>/perf_audit_report.md`. Summary shape: overall verdict, traffic-quality assessment (SIS/CPC/Paid CVR trends), campaign status (pauses, tROAS suppression, budget exhaustion), one-sentence key finding, optional surprise hypothesis. Funnel data deliberately excluded from the summary — perf-audit's attribution differs from Mixpanel's, and CVR-RCA owns the funnel numbers. Step 2b gains check #10 (Perf-audit reconciliation): same four-pattern routing as Slack — Pattern A corroborates a leaf, B names the campaign-level *why*, C reframes the root cause when traffic quality degraded alongside a page finding, D tests a surprise hypothesis with one query max. Path resolution: `$PERF_AUDIT_SKILL_PATH` env var → `~/.perf-audit-skill/SKILL.md` (companion install) → sibling directory → legacy `~/Documents/perf-audit-skill/`. If none resolve, log "Perf-audit skill not installed — skipped" and continue. hypothesis.md LP2S and Mix sections gain background-context pointers explaining that the perf-audit verdict folds in at Step 2b, never during dimension-cut phase. INSTALL.md Step 6 adds an optional companion install. Perf-audit is consulted *only* at Step 2b — the data-driven branches must reach their own leaves before the perf-audit verdict is read, so it corroborates or surprises a completed picture rather than steering branch selection. |

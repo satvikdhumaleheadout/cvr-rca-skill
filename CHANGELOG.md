@@ -4,6 +4,38 @@ This file tracks every meaningful change pushed to this repository. Each entry c
 
 ---
 
+## [v1.13] — 2026-05-22 — Perf-audit companion-skill integration (plug-and-play sub-agent)
+
+**Summary:** CVR-RCA gains a paid-traffic enrichment layer by spawning a separate companion skill — [`perf-audit-skill`](https://github.com/aaradhyaraiHO/perf-audit-skill) — as a background sub-agent whenever the L1 cascade fixes on Paid. Mirrors the Slack fire-and-forget pattern exactly: spawn at the end of the cascade, do not consult during L2+ dimension cuts, read the verdict only at Step 2b synthesis. Two skills stay independent — no schemas, queries, or diagnostic logic moved between them. The sub-agent runs the full perf-audit on the CVR-RCA's pre/post date windows and writes a structured summary (overall verdict, SIS / CPC / Paid CVR trends, campaign status, one-sentence key finding, optional surprise hypothesis) to `<run_dir>/perf_audit_summary.md`. Step 2b check #10 reconciles the verdict using the same four-pattern model as Slack (A direct corroboration, B mechanism explanation, C reframing context, D testable gap, Reject). Funnel data is deliberately excluded from the summary to avoid attribution conflicts with the Mixpanel funnel — CVR-RCA owns the funnel numbers, perf-audit owns the traffic-and-campaign side. Distribution via convention: companion install at `~/.perf-audit-skill/` (added as optional Step 5 in INSTALL.md), with env-var override and sibling-directory + legacy fallbacks. CVR-RCA runs fully without it — if path resolution fails, the run logs `Perf-audit skill not installed — skipped` and continues. The integration is additive evidence, never a gate.
+
+### Changes by file
+
+**`SKILL.md`** — c030
+- New section "Perf-audit context — fire and forget (Paid-side only)" inserted at the end of the L1 cascade (immediately before L2+). Trigger conditions, skip conditions, four-step path resolution, full spawn block with structured summary shape, context-isolation note.
+- Step 2b gains check #10 "Perf-audit reconciliation" with four-pattern routing (A/B/C/D) + Reject + DATA GAP handling. Explicit reaffirmation that perf-audit is consulted only at this point — never during L2+ — so the data-driven branches must reach their own leaves first.
+- Evidence inventory entry shape specified (Verdict / Key metrics / Campaign issues / Implication / Source).
+- Root cause callout requirement: Patterns A, B, C must reflect the perf-audit verdict in the final report.
+
+**`references/hypothesis.md`** — c030
+- LP2S first-pass branches gain a "Paid fixed segment — perf-audit background context" paragraph explaining the sub-agent runs in parallel and the verdict folds in at Step 2b, not during dimension cuts.
+- Mix first-pass branches gain a "Perf-audit background context (Level 2 and Level 3 exits)" paragraph explaining how Pattern B in check #10 routes campaign-level *why* findings into Layer 1 narrative without a second query.
+
+**`INSTALL.md`** — c030
+- New optional Step 5 "Install the perf-audit companion skill". Detects existing install, prompts user, fetches from `aaradhyaraiHO/perf-audit-skill` to `~/.perf-audit-skill/`. Previous Step 5 (Confirm) renumbered to Step 6.
+
+### What did not change
+
+- `references/context.md` — perf-audit owns its own data layer (table schemas, queries, diagnostic trees). CVR-RCA does not learn `ads_campaign_stats` or `google_ads_campaign_stats` shapes.
+- The perf-audit skill itself — runs as-is, no fork or vendoring.
+- Report structure — perf-audit findings appear as evidence entries and Section 3 Market Context rows, never as new sections.
+- No blocking dependency — every existing CVR-RCA path continues to work without perf-audit installed.
+
+### Why this design
+
+The plug-and-play sub-agent pattern keeps both skills independently maintainable: perf-audit releases on its own cadence at `aaradhyaraiHO/perf-audit-skill`, CVR-RCA on its cadence here, and the bridge is a thin spawn-and-read contract. The fire-and-forget timing — same as Slack — protects the integrity of the data-driven investigation: dimension cuts reach their own leaves before the perf-audit verdict is read, so traffic-quality signals corroborate or surprise a completed picture rather than steering branch selection. This is the difference between *evidence weighting* (good) and *evidence biasing* (bad).
+
+---
+
 ## [v1.12] — 2026-05-22 — Bidirectional RCA support, four-pattern Slack reconciliation, link-to-table styling, jargon preservation
 
 **Summary:** Largest skill release since v1.0. Three connected expansions land together. **(1) Bidirectional RCA support** — the skill now treats CVR improvements as first-class investigations alongside declines. New "Improvement direction" first-pass branch sets in `hypothesis.md` (LP2S / S2C / C2O / Mix in the positive direction). New bidirectional Pattern 11 (Catalogue change — TGID launch, disablement, restructure) with data-driven trigger and query template in `context.md`. New "Improvement direction — action templates" library in `actions.md`: **Protect** / **Extend** / **Investigate-headwind** sub-templates with starter actions and DRIs. Report-structure spec gains improvement-case headwind magnitude threshold (<~10% of ΔCVR → fold into sub-bullet), sign-aware Shapley flex bar for mixed contributions, and direction-aware scoring guidance in the evaluator. Decline path is preserved and strengthened — no decline behaviour is weakened by the bidirectional work; cross-cut trigger rule rephrased to "concentrated movement (in either direction)" with identical threshold. **(2) Four-pattern Slack reconciliation model** — Step 2b check #9 rewritten. Every signal classifies into Pattern A (direct corroboration), B (mechanism explanation), C (reframing context), D (testable gap), or Reject. Each pattern routes to a specific surface in the report: A elevates Section 3 verdict subtext citations (decline-specific), B drives Layer 1 narrative weaving + Market Context block, C drives Layer 2 Important Context callout-item + Market Context block, D triggers a one-query test with `(prompted by Author · date ↗)` citation. Mandatory timeframe-citation rule for different-period Slack metrics. One-citation-per-concept rule. Reaffirms that Slack is consulted **only** at Step 2b — never during L0/L1/L2 — the fire-and-forget pattern is deliberate. New "Slack signal classification" reference table in `hypothesis.md`. High-value gap categories listed for Pattern D (assortment changes, pricing levers, content updates, supplier changes, catalogue events). **(3) Link-to-table styling + jargon preservation.** Every Section 3 analysis block now carries an `id` attribute; canonical anchor ID convention listed in `report_structure.md`. New `.ref-link` CSS (small ↗ icon, blue-grey, smooth scroll, `:target` highlight). ↗ used in Section 1 callout, Section 2 action cards, Hypotheses Explored "Test run" column — never inside Section 3 verdict lines or subtexts. Citation format split: bare `↗` for internal navigation, `Source · date ↗` for Slack citations. New styling rule 5: preserve Headout-native jargon (WBR, SP, GBV, RR vs plan, TGID, TID, VID, CR%, FabriGPT, MB / HO, LP2S, S2C, C2A, A2O, C2O) — paraphrasing reduces stakeholder trust by hiding the source. Does not override the existing investigation-internal-labels-translated rule. **(4) Step 4 footer hardened** — the two output lines (`Evaluation → …` and `[Total X/35] · …`) are the only chat output at end of run. No narrative summary, no Slack recap, no highlights block. **(5) Same-period vs different-period data boundary** documented in `context.md` to prevent fabricated YoY figures while allowing external reframing context.
