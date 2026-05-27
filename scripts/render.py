@@ -1227,7 +1227,246 @@ SECTION_TITLES = {
     "session_recordings_table":    ("Session Recordings", "Directly observed user behaviour · post period"),
 }
 
-def assemble(spec: dict, summary: dict, template: str) -> str:
+# ─────────────────────────────────────────────────────────────────────────────
+# Markdown → HTML (perf-audit tab, and any future markdown-sourced tab)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Perf-audit ships pure markdown (10 numbered sections, GFM-style tables, lists,
+# bold/italic, links). We need to embed that markdown as a tab pane inside the
+# CVR-RCA HTML without taking a hard dependency on the `markdown` PyPI package
+# (the skill ships as files, not a Python project with a pinned requirements).
+# This renderer handles exactly what perf-audit emits — not a general markdown
+# implementation. Heading IDs are injected at render time with a configurable
+# prefix so cross-tab anchors stay namespaced and stable.
+
+def _slugify(text: str) -> str:
+    """Turn a heading like '5. Coverage + Matchmaking' into 'coverage-matchmaking'."""
+    text = re.sub(r"^\s*\d+\.\s*", "", text)            # drop leading "5. "
+    text = re.sub(r"[`*_]", "", text)                    # strip md emphasis
+    text = re.sub(r"[^\w\s-]", "", text.lower())
+    text = re.sub(r"[\s_]+", "-", text).strip("-")
+    return text or "section"
+
+def _md_inline(text: str) -> str:
+    """Inline conversions: links, code, bold, italic. Order matters."""
+    # links: [label](url)
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', text)
+    # inline code: `code`
+    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+    # bold: **text**
+    text = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", text)
+    # italic: *text* (not part of bold)
+    text = re.sub(r"(?<!\*)\*([^*\n]+)\*(?!\*)", r"<em>\1</em>", text)
+    return text
+
+def _md_parse_table(lines: list[str], start: int) -> tuple[str, int]:
+    """Parse a GFM pipe table starting at `lines[start]`. Returns (html, consumed)."""
+    def cells(row: str) -> list[str]:
+        row = row.strip().strip("|")
+        return [c.strip() for c in row.split("|")]
+
+    header_cells = cells(lines[start])
+    # alignment row is lines[start+1] — we don't honour alignment, just consume it
+    i = start + 2
+    rows: list[list[str]] = []
+    while i < len(lines) and "|" in lines[i] and lines[i].strip():
+        rows.append(cells(lines[i]))
+        i += 1
+    out = ['<table class="md-table"><thead><tr>']
+    for cell in header_cells:
+        out.append(f"<th>{_md_inline(cell)}</th>")
+    out.append("</tr></thead><tbody>")
+    for row in rows:
+        out.append("<tr>")
+        for cell in row:
+            out.append(f"<td>{_md_inline(cell)}</td>")
+        out.append("</tr>")
+    out.append("</tbody></table>")
+    return "".join(out), i - start
+
+def _md_parse_list(lines: list[str], start: int, ordered: bool) -> tuple[str, int]:
+    """Parse a contiguous list block. Returns (html, consumed)."""
+    pat = re.compile(r"^\s*\d+\.\s+(.*)$" if ordered else r"^\s*[-*]\s+(.*)$")
+    items: list[str] = []
+    i = start
+    while i < len(lines):
+        m = pat.match(lines[i])
+        if not m:
+            break
+        items.append(_md_inline(m.group(1)))
+        i += 1
+    tag = "ol" if ordered else "ul"
+    return f"<{tag}>" + "".join(f"<li>{it}</li>" for it in items) + f"</{tag}>", i - start
+
+def render_markdown_to_html(md: str, anchor_prefix: str = "") -> str:
+    """Render perf-audit-style markdown to HTML.
+
+    Supported:
+      - ATX headings (#..######) with auto-injected `id="<anchor_prefix><slug>"`
+      - GFM pipe tables → `<table class="md-table">`
+      - Unordered (- *) and ordered (1.) lists
+      - Bold (**), italic (*), inline code (`), links ([t](u))
+      - Horizontal rules (---)
+      - Paragraphs (blank-line separated)
+      - HTML comments are passed through unchanged (perf-audit uses <!-- markers -->)
+
+    Anything outside this surface is rendered as plain paragraph text.
+    """
+    lines = md.split("\n")
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+
+        # HTML comment passthrough — perf-audit uses these as section markers
+        if stripped.startswith("<!--") and stripped.endswith("-->"):
+            out.append(stripped)
+            i += 1
+            continue
+
+        # ATX heading
+        m = re.match(r"^(#{1,6})\s+(.+?)\s*#*\s*$", line)
+        if m:
+            level = len(m.group(1))
+            text = m.group(2)
+            slug = _slugify(text)
+            anchor = f' id="{anchor_prefix}{slug}"' if anchor_prefix else f' id="{slug}"'
+            out.append(f"<h{level}{anchor}>{_md_inline(text)}</h{level}>")
+            i += 1
+            continue
+
+        # Horizontal rule
+        if re.match(r"^-{3,}\s*$", line) or re.match(r"^_{3,}\s*$", line):
+            out.append("<hr>")
+            i += 1
+            continue
+
+        # GFM pipe table — header row + separator row
+        if (
+            "|" in line
+            and i + 1 < len(lines)
+            and re.match(r"^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$", lines[i + 1])
+        ):
+            tbl, consumed = _md_parse_table(lines, i)
+            out.append(tbl)
+            i += consumed
+            continue
+
+        # Unordered list
+        if re.match(r"^\s*[-*]\s+", line):
+            lst, consumed = _md_parse_list(lines, i, ordered=False)
+            out.append(lst)
+            i += consumed
+            continue
+
+        # Ordered list
+        if re.match(r"^\s*\d+\.\s+", line):
+            lst, consumed = _md_parse_list(lines, i, ordered=True)
+            out.append(lst)
+            i += consumed
+            continue
+
+        # Blank line
+        if not stripped:
+            i += 1
+            continue
+
+        # Paragraph — gather contiguous non-empty non-block lines
+        para = [line]
+        i += 1
+        while i < len(lines):
+            nxt = lines[i]
+            if not nxt.strip():
+                break
+            if re.match(r"^(#{1,6}\s|[-*]\s|\d+\.\s|-{3,}\s*$|_{3,}\s*$)", nxt):
+                break
+            if "|" in nxt and i + 1 < len(lines) and re.match(
+                r"^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$", lines[i + 1] if i + 1 < len(lines) else ""
+            ):
+                break
+            para.append(nxt)
+            i += 1
+        out.append(f"<p>{_md_inline(' '.join(s.strip() for s in para))}</p>")
+
+    return "\n".join(out)
+
+
+def render_markdown_tab(path: Path, anchor_prefix: str) -> str:
+    """Read a markdown file and return HTML for its tab pane.
+
+    If the file is missing or empty, return a small "not available" placeholder
+    so the tab still renders rather than producing a broken pane. The caller
+    decides whether to emit the tab at all — we don't crash here.
+    """
+    if not path.exists():
+        return (
+            '<div class="md-content"><p style="color:#8892a4;font-style:italic;">'
+            f"Source file <code>{path.name}</code> not found in run directory."
+            "</p></div>"
+        )
+    md_text = path.read_text(encoding="utf-8")
+    if not md_text.strip():
+        return (
+            '<div class="md-content"><p style="color:#8892a4;font-style:italic;">'
+            f"Source file <code>{path.name}</code> is empty."
+            "</p></div>"
+        )
+    body = render_markdown_to_html(md_text, anchor_prefix=anchor_prefix)
+    return f'<div class="md-content">{body}</div>'
+
+
+def render_tab_bar(tabs: list[dict]) -> str:
+    """Emit the sticky tab bar above the panes. Only called when tabs >= 2."""
+    buttons = []
+    for idx, tab in enumerate(tabs):
+        tab_id = tab["id"]
+        label = tab.get("label", tab_id)
+        active = " active" if idx == 0 else ""
+        buttons.append(
+            f'<button class="tab-button{active}" data-tab="{tab_id}" '
+            f'role="tab" aria-selected="{str(idx == 0).lower()}">{label}</button>'
+        )
+    return f'<div class="tab-bar" role="tablist">{"".join(buttons)}</div>'
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Spec assembly
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _render_sections(sections: list, summary: dict, all_charts: list) -> str:
+    """Loop through a sections[] array and render each component.
+
+    Extracted from the original inline loop in `assemble()` so the same logic
+    can run per-tab. `all_charts` is mutated in place — Plotly init scripts are
+    emitted once at the end, after all tabs are assembled.
+    """
+    html_acc = ""
+    for item in sections:
+        item = normalize_spec_item(item)
+        t = item.get("component", "")
+        html, charts = dispatch(item, summary)
+        all_charts.extend(charts)
+
+        title_tmpl, subtitle_tmpl = SECTION_TITLES.get(t, (t, ""))
+
+        if title_tmpl is None:
+            html_acc += html
+        else:
+            fmt_kwargs = dict(item)
+            fmt_kwargs.setdefault("dim_label", item.get("dim", "").replace("_", " ").title())
+            raw_dims = item.get("dims", [])
+            fmt_kwargs.setdefault(
+                "dims_label",
+                " & ".join(d.replace("_", " ").title() for d in raw_dims) if raw_dims else ""
+            )
+            title    = title_tmpl.format(**fmt_kwargs)
+            subtitle = subtitle_tmpl.format(**fmt_kwargs)
+            html_acc += section(title, html, subtitle)
+    return html_acc
+
+
+def assemble(spec: dict, summary: dict, template: str, spec_dir: Path | None = None) -> str:
     meta    = summary.get("meta", {})
     sections_html = ""
     all_charts: list[tuple[str, dict]] = []
@@ -1280,30 +1519,49 @@ def assemble(spec: dict, summary: dict, template: str) -> str:
   </div>
 </div>"""
 
-    for item in spec.get("sections", []):
-        item = normalize_spec_item(item)
-        t    = item.get("component", "")
-        html, charts = dispatch(item, summary)
-        all_charts.extend(charts)
-
-        title_tmpl, subtitle_tmpl = SECTION_TITLES.get(t, (t, ""))
-
-        if title_tmpl is None:
-            # section_header, callout, executive_summary: render directly without wrapper
-            sections_html += html
-        else:
-            # Build format kwargs — include dim_label for dimension_table titles
-            fmt_kwargs = dict(item)
-            fmt_kwargs.setdefault("dim_label", item.get("dim", "").replace("_", " ").title())
-            # Build dims_label for dimension_table_pair (e.g. "Device & Page Type")
-            raw_dims = item.get("dims", [])
-            fmt_kwargs.setdefault(
-                "dims_label",
-                " & ".join(d.replace("_", " ").title() for d in raw_dims) if raw_dims else ""
+    # ── Tabs vs flat sections ─────────────────────────────────────────────────
+    # The spec may use one of two shapes:
+    #   • Flat (legacy):  {"sections": [...]}
+    #   • Tabbed:         {"tabs": [{"id": "...", "label": "...", "sections": [...]}
+    #                              | {"id": "...", "label": "...",
+    #                                 "source": {"type": "markdown", "path": "..."}}]}
+    # When the tab list has 2+ entries we emit a tab bar above panes; with one
+    # entry (or no tabs key) we emit content flat — zero regression for older
+    # specs and for runs where the perf-audit didn't fire.
+    tabs = spec.get("tabs")
+    if tabs and len(tabs) >= 2:
+        sections_html += render_tab_bar(tabs)
+        for idx, tab in enumerate(tabs):
+            active_cls = " active" if idx == 0 else ""
+            tab_id = tab["id"]
+            if "sections" in tab:
+                pane_body = _render_sections(tab["sections"], summary, all_charts)
+            elif "source" in tab and tab["source"].get("type") == "markdown":
+                src_path = tab["source"]["path"]
+                # Resolve path relative to the spec file's directory (the run_dir)
+                full_path = (spec_dir / src_path) if spec_dir else Path(src_path)
+                anchor_prefix = tab.get("anchor_prefix", f"{tab_id}-")
+                pane_body = render_markdown_tab(full_path, anchor_prefix)
+            else:
+                pane_body = (
+                    '<div style="color:#8892a4;font-style:italic;padding:20px;">'
+                    f'Tab "{tab_id}" has no sections or source.</div>'
+                )
+            sections_html += (
+                f'<div class="tab-pane{active_cls}" id="tab-{tab_id}" role="tabpanel">'
+                f'{pane_body}</div>'
             )
-            title    = title_tmpl.format(**fmt_kwargs)
-            subtitle = subtitle_tmpl.format(**fmt_kwargs)
-            sections_html += section(title, html, subtitle)
+    elif tabs and len(tabs) == 1:
+        # Single tab: render flat (no tab bar). Source could still be markdown.
+        only = tabs[0]
+        if "sections" in only:
+            sections_html += _render_sections(only["sections"], summary, all_charts)
+        elif "source" in only and only["source"].get("type") == "markdown":
+            full_path = (spec_dir / only["source"]["path"]) if spec_dir else Path(only["source"]["path"])
+            sections_html += render_markdown_tab(full_path, only.get("anchor_prefix", ""))
+    else:
+        # Legacy flat spec — backward compatible
+        sections_html += _render_sections(spec.get("sections", []), summary, all_charts)
 
     # Plotly init JS
     js_lines = []
@@ -1347,14 +1605,17 @@ def main():
     args = p.parse_args()
 
     summary  = json.loads(Path(args.summary).read_text())
-    spec     = json.loads(Path(args.spec).read_text())
+    spec_path = Path(args.spec)
+    spec     = json.loads(spec_path.read_text())
 
     # Find template relative to this script if not specified
     template_path = (Path(args.template) if args.template
                      else Path(__file__).parent.parent / "templates" / "report.html")
     template = template_path.read_text()
 
-    html = assemble(spec, summary, template)
+    # spec_dir lets `tabs[].source.path` resolve relative to the run directory,
+    # so the spec can reference `perf_audit_report.md` without absolute paths.
+    html = assemble(spec, summary, template, spec_dir=spec_path.parent)
     Path(args.output).write_text(html, encoding="utf-8")
     print(f"Report written → {args.output}")
 

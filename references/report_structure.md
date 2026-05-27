@@ -115,8 +115,101 @@ Every Section 3 analysis block carries an `id` attribute (see "Anchor ID convent
 **Citation format split:**
 - Internal navigation: bare `↗` (one character, no text)
 - Slack source: `Source · date ↗` (name + date as text, arrow as the link)
+- Perf-audit source: `per perf-audit ↗` or `perf-audit named: <event · date> ↗` (see "Tabbed report structure" below for the cross-tab anchor scheme)
 
-Both use the same `.ref-link` CSS class — visually consistent, semantically distinct by context.
+All three use the same `.ref-link` CSS class — visually consistent, semantically distinct by context. When the anchor target lives in a non-default tab (e.g., `#perfaudit-paid-deep-dive`), the JS in the template switches tabs before scrolling; same visual experience for the reader.
+
+---
+
+## Tabbed report structure
+
+The report can hold multiple analyses in one file via a tab framework. Today there are two real tabs: the CVR-RCA itself (always present) and the Paid Performance Audit (present only when the perf-audit sub-agent ran). The framework is **scalable** — a third or fourth tab (e.g., a future experiment-RCA or supply-RCA) is one config entry, not a rewrite.
+
+### When tabs appear
+
+- **No tabs (flat layout):** the spec uses the legacy `{"sections": [...]}` shape, OR `{"tabs": [...]}` with exactly one tab. Used when the cascade fixed on Organic, perf-audit was not installed, or perf-audit returned DATA GAP / timed out.
+- **Tabs visible:** the spec uses `{"tabs": [...]}` with **two or more** tabs. The tab bar is sticky under the report banner; the first tab is active on load.
+
+Backward compatibility is absolute — a legacy single-section spec renders byte-identically to v1.13 output.
+
+### Spec shape
+
+```json
+{
+  "tabs": [
+    {
+      "id": "cvr-rca",
+      "label": "CVR RCA",
+      "sections": [ {"component": "metric_cards"}, ... ]
+    },
+    {
+      "id": "perfaudit",
+      "label": "Paid Performance Audit",
+      "source": {"type": "markdown", "path": "perf_audit_report.md"},
+      "anchor_prefix": "perfaudit-"
+    }
+  ]
+}
+```
+
+Per-tab keys:
+- `id` — required. Used in the DOM (`tab-<id>`) and the button (`data-tab="<id>"`).
+- `label` — required. The visible tab name. Keep it short — 3 words max.
+- `sections` — optional. An array of component dicts, same shape as legacy top-level `sections`. Mutually exclusive with `source`.
+- `source` — optional. `{"type": "markdown", "path": "<run-dir-relative>"}`. `render.py` reads and parses the markdown at build time, injects anchor IDs on every heading, and emits the body inside `<div class="md-content">`. Mutually exclusive with `sections`.
+- `anchor_prefix` — optional. Defaults to `"<id>-"` (e.g., `perfaudit-`). Prepended to every slugified heading ID so cross-tab links stay namespaced.
+
+### Cross-tab anchor scheme
+
+| Tab | Anchor prefix | Example |
+|---|---|---|
+| CVR-RCA (Section 3 blocks) | `block-*` and `chart-*` (no tab prefix) | `#block-cascade`, `#chart-daily-c2o` |
+| Paid Performance Audit | `perfaudit-*` | `#perfaudit-paid-deep-dive`, `#perfaudit-coverage-matchmaking` |
+
+The slug generator strips a leading "N. " from numbered headings, so `## 5. Coverage + Matchmaking` becomes `id="perfaudit-coverage-matchmaking"`. Stable across re-renders as long as the heading text is unchanged.
+
+### Citation routing — CVR-RCA → perf-audit tab
+
+When Step 2b check #10 (perf-audit reconciliation) routes a finding into the CVR-RCA tab, the citation includes a `↗` linking to the most relevant perf-audit anchor. Use this routing table:
+
+| Citation context | Anchor target |
+|---|---|
+| Traffic-quality verdict (SIS / CPC / Paid CVR trends) | `#perfaudit-paid-deep-dive` |
+| Campaign pause / dormancy event | `#perfaudit-paid-deep-dive` |
+| Cohort coverage / language-geo CVR breakdown | `#perfaudit-coverage-matchmaking` |
+| tROAS self-suppression / bidding strategy | `#perfaudit-paid-deep-dive` |
+| Competitor surge / auction insights | `#perfaudit-external-dynamics` |
+| Funnel comparison from the ads side | `#perfaudit-funnel` (advisory — never cited in primary funnel claims) |
+| Generic "see full perf-audit" reference | `#perfaudit-executive-summary` |
+
+### Citation phrasings (four patterns — mirrors Slack)
+
+The four-pattern reconciliation in `SKILL.md → Step 2b check #10` produces citations in these shapes:
+
+| Pattern | Phrasing | Example |
+|---|---|---|
+| A — direct corroboration | `(per perf-audit ↗)` | "LP2S concentrated on URL set X (per perf-audit ↗)." |
+| B — mechanism explanation | `(perf-audit named: <event · date> ↗)` | "(perf-audit named: campaign 'Brand-Search-EN' paused Apr 8 ↗)" |
+| C — reframing context | `(traffic quality DEGRADED — per perf-audit ↗)` | "Page-side fix needed AND traffic-quality contributor (per perf-audit ↗)." |
+| D — testable gap | Inline `(prompted by perf-audit ↗)` after the data-driven leaf that resulted | "TGID 7148 surge confirmed (prompted by perf-audit ↗)." |
+
+Citation placement follows the same rules as Slack:
+- **Allowed:** Section 1 callout subtexts, Section 2 action card cause lines, Section 3 Market Context block, Hypotheses Explored "Test run" column.
+- **Not allowed:** Section 3 verdict lines or their subtexts (Section 3 *is* the evidence — internal navigation between Section 3 blocks is noise).
+- **One citation per concept** — same rule as Slack. If the perf-audit verdict supports three sentences in a paragraph, cite it once at the most natural anchor.
+
+### Visual differences from CVR-RCA content
+
+The perf-audit tab uses `.md-content` styling, which inherits the dark-theme look but keeps the markdown structure (h2/h3 hierarchy, GFM tables with `.md-table` class, lists, bold/italic). It deliberately does **not** mimic Section 3's `.analysis-block` cards — the perf-audit report has its own logic and section structure; restyling it would obscure that. The visual cue is intentional: the reader knows they're looking at a different artifact.
+
+### When the perf-audit tab is conditional / omitted
+
+The CVR-RCA tab is unconditional. The perf-audit tab is emitted only when:
+1. The cascade fixed on Paid (Trigger 1 or Trigger 2 from `SKILL.md → "Perf-audit context — fire and forget"`), AND
+2. `perf_audit_report.md` exists in the run directory and has non-empty content, AND
+3. The sub-agent verdict was not `DATA GAP: no campaigns` (in which case there is no useful content to show; the verdict still surfaces via the findings.md evidence entry and any Pattern B/C citations)
+
+When any of those fail, the spec is single-tab (or flat) and the tab bar is omitted. Citations into the perf-audit tab don't appear because the corresponding evidence inventory entry doesn't exist.
 
 ---
 

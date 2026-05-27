@@ -841,6 +841,18 @@ Save to: `<run_dir>/findings.md`
     leaf or rejected; either way it leaves a trail in the tree map. Reject and
     DATA GAP outcomes get a single line in findings and no special callout.
 
+    **Cross-tab citations.** When the perf-audit report is present, Step 3 will
+    emit it as a second tab in `report.html`. Every Pattern A/B/C/D citation
+    you write into findings.md (and ultimately the report) must include a
+    `↗` linking to the most relevant perf-audit anchor — the JS in the
+    report template switches to the perf-audit tab and scrolls automatically.
+    Citation phrasing and the anchor routing table (which finding type links
+    to which `#perfaudit-*` section) live in
+    `report_structure.md → "Tabbed report structure → Citation routing"`. Use
+    the table; do not invent anchors. If `perf_audit_report.md` is empty or
+    missing, the tab is omitted and citations should reference the
+    `perf_audit_summary.md` file inline instead — but this is the rare path.
+
 Once all open items are resolved or explicitly accepted, proceed to Step 3.
 
 ---
@@ -850,6 +862,31 @@ Once all open items are resolved or explicitly accepted, proceed to Step 3.
 Follow `report_structure.md` exactly. Write from the solidified `findings.md` —
 the findings summary is the source of truth for every claim in the report.
 Write the output to: `<run_dir>/report.html`
+
+**Tab framework — when to use it.** Inspect `<run_dir>/perf_audit_report.md`.
+If the file exists and is non-empty AND the perf-audit verdict was not
+`DATA GAP: no campaigns`, write `report_spec.json` using the multi-tab shape:
+
+```json
+{
+  "tabs": [
+    {"id": "cvr-rca",   "label": "CVR RCA",                 "sections": [ ...the existing components... ]},
+    {"id": "perfaudit", "label": "Paid Performance Audit",  "source": {"type": "markdown", "path": "perf_audit_report.md"}}
+  ]
+}
+```
+
+Otherwise (perf-audit didn't run, returned empty, was DATA GAP, or the cascade
+fixed on Organic), use the legacy flat shape: `{"sections": [ ... ]}`. Both
+shapes are accepted by `scripts/render.py`; the tab bar appears only when two
+or more tabs are present. The CVR-RCA tab is unconditional — only the
+perf-audit tab is conditional.
+
+The full spec for the tab framework — anchor scheme (`perfaudit-<slug>`),
+citation routing (which finding type links to which perf-audit anchor), and
+the four-pattern citation phrasings — lives in
+`report_structure.md → "Tabbed report structure"`. Step 2b check #10 produces
+the citations; this step (Step 3) only decides whether to emit the tab.
 
 For a concrete walkthrough of how an investigation unfolds end-to-end, see
 `references/worked_example.md`.
@@ -978,3 +1015,4 @@ not generic "investigate further" text.
 | c029 | 2026-05-22 | Slack reconciliation expanded into four-pattern model and made bidirectional. Step 2b check #9 rewritten: signals classified into Pattern A (direct corroboration), B (mechanism explanation), C (reframing context), D (testable gap), or rejected. Reaffirms that Slack is consulted **only** at this point — never during L0/L1/L2 — the fire-and-forget pattern is deliberate so Slack doesn't steer branch selection. Pattern A on declines gets a citation-elevation rule (bare `(corroborated ↗)` becomes named `(per Author · date ↗)` when the action is going to a DRI). Pattern B routes to Layer 1 narrative weaving + Section 3 Market Context block. Pattern C routes to a Layer 2 Important Context callout-item in Section 1 (high bar — four decision-changing tests); how to phrase the citation when the Slack timeframe differs from the report's pre/post is a styling concern handled in `report_structure.md → "Timeframe-citation rule"` (SKILL.md only points to it; the spec itself lives in the styling file). Added high-value gap categories list (operational events: assortment changes, pricing levers, content updates, product restructures, API migrations, vendor moves) — Pattern D recognises these as good retrospective query candidates. Added "one citation per concept" rule. Step 4 footer hardened: the two output lines are the only chat output — no narrative summary, no Slack recap, no highlights block. Session recordings rule extended explicitly to improvement loci (decline = look for failure; improvement = verify smooth flow + surface new UI elements). L2+ section gains direction-sensitive language and a pointer to `hypothesis.md → "Improvement direction — first-pass branches"` when CVR improved. Catalogue change called out as a first-class data-driven hypothesis (no Slack input required to trigger). |
 | c027 | 2026-05-21 | First-pass batch parallelised via sub-agents. "Run all branches within a level in parallel" replaced with a five-step spawning protocol: (1) write SQL for every cut before spawning, (2) open transcript section, (3) spawn one sub-agent per cut — each receives only SQL + output path + output contract (no reference files, context isolation enforced), (4) wait for all sub-agents before reading any result, (5) fill transcript and synthesise from the combined picture. Batch JSON files saved to `<run_dir>/batch_<cut_name>.json`. Failure handling: missing or empty JSON = DATA PULL FAILURE, log and continue, do not re-query inline. Applies to the first-pass branch set only; deeper levels (L2, L3) remain sequential. |
 | c030 | 2026-05-22 | Perf-audit companion-skill integration. When the cascade fixes on Paid (conversion path at L2/L3, or routing exit at L2/L3), spawn the perf-audit sub-agent at the end of the cascade and continue immediately — mirrors the Slack fire-and-forget pattern. Sub-agent runs the standalone perf-audit skill ([aaradhyaraiHO/perf-audit-skill](https://github.com/aaradhyaraiHO/perf-audit-skill)) with the CE name and pre/post date windows; returns a structured summary at `<run_dir>/perf_audit_summary.md` and the full report at `<run_dir>/perf_audit_report.md`. Summary shape: overall verdict, traffic-quality assessment (SIS/CPC/Paid CVR trends), campaign status (pauses, tROAS suppression, budget exhaustion), one-sentence key finding, optional surprise hypothesis. Funnel data deliberately excluded from the summary — perf-audit's attribution differs from Mixpanel's, and CVR-RCA owns the funnel numbers. Step 2b gains check #10 (Perf-audit reconciliation): same four-pattern routing as Slack — Pattern A corroborates a leaf, B names the campaign-level *why*, C reframes the root cause when traffic quality degraded alongside a page finding, D tests a surprise hypothesis with one query max. Path resolution: `$PERF_AUDIT_SKILL_PATH` env var → `~/.perf-audit-skill/SKILL.md` (companion install) → sibling directory → legacy `~/Documents/perf-audit-skill/`. If none resolve, log "Perf-audit skill not installed — skipped" and continue. hypothesis.md LP2S and Mix sections gain background-context pointers explaining that the perf-audit verdict folds in at Step 2b, never during dimension-cut phase. INSTALL.md Step 6 adds an optional companion install. Perf-audit is consulted *only* at Step 2b — the data-driven branches must reach their own leaves before the perf-audit verdict is read, so it corroborates or surprises a completed picture rather than steering branch selection. |
+| c031 | 2026-05-23 | Tabbed report framework. `report_spec.json` accepts a new `tabs[]` shape — each tab has an `id`, `label`, and either inline `sections[]` (Claude-authored components) or a `source` pointer (e.g., `{"type": "markdown", "path": "perf_audit_report.md"}`). `scripts/render.py` gains a markdown-to-HTML renderer (stdlib only — no PyPI dependency; handles headings + GFM tables + lists + bold/italic/code/links/HR), a tab-bar emitter, and per-tab dispatch. Anchor IDs are injected on every markdown heading with a configurable prefix (default `<tab-id>-`) so cross-tab links stay namespaced — perf-audit headings become `#perfaudit-<slug>` (`5. Coverage + Matchmaking` → `perfaudit-coverage-matchmaking`). `templates/report.html` gains sticky tab-bar CSS, `.md-content` + `.md-table` styling for markdown-sourced tabs, and a ~50-line vanilla-JS handler that switches tabs when `.ref-link` anchors target a non-active pane (with Plotly resize for charts in newly-visible panes). Step 3 writes the tabs-shaped spec when `perf_audit_report.md` exists and is non-empty; otherwise it writes the legacy flat spec — backward compatibility is byte-identical for single-tab runs. Step 2b check #10 extended: every perf-audit citation must carry a `↗` linking to the appropriate `#perfaudit-*` anchor per the routing table in `report_structure.md → "Tabbed report structure → Citation routing"`. The framework is scalable — a third tab (future experiment-RCA, supply-RCA, etc.) is one config entry, not a rewrite. |

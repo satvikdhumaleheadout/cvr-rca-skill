@@ -4,6 +4,45 @@ This file tracks every meaningful change pushed to this repository. Each entry c
 
 ---
 
+## [v1.14] — 2026-05-23 — Tabbed report framework (single deliverable for C-level audits)
+
+**Summary:** The CVR-RCA report becomes a multi-tab HTML deliverable. The first tab is the existing CVR-RCA report (unchanged). When the perf-audit sub-agent ran (cascade fixed on Paid), a second tab — **Paid Performance Audit** — is rendered inline from `perf_audit_report.md` so stakeholders can read the full perf-audit without opening a separate file. Cross-tab citations work natively: every `(per perf-audit ↗)` style reference inside the CVR-RCA tab deep-links into the right perf-audit section, switching tabs and scrolling automatically. The framework is **scalable** by design — adding a future third tab (experiment-RCA, supply-RCA, anything else with markdown output) is a one-line config entry, not a rewrite. Backward compatibility is absolute: any run where the perf-audit didn't fire (Organic segment, not installed, DATA GAP) produces the existing flat report — byte-identical to v1.13 output. The perf-audit skill itself is **not modified** — CVR-RCA renders its markdown at report-build time, so the two skills retain independent release cadences (perf-audit ships at [aaradhyaraiHO/perf-audit-skill](https://github.com/aaradhyaraiHO/perf-audit-skill)).
+
+### Changes by file
+
+**`scripts/render.py`** — c031
+- New stdlib-only markdown-to-HTML renderer (~150 lines). Handles ATX headings, GFM pipe tables, ordered/unordered lists, bold/italic/code/links, horizontal rules, HTML comment passthrough. Heading IDs are injected at render time with a configurable prefix (default `<tab-id>-`) so cross-tab anchors stay stable and namespaced.
+- New `render_markdown_tab(path, anchor_prefix)` — reads a markdown file, renders to HTML, wraps in `<div class="md-content">`. Graceful fallback to a "source file not found" placeholder if the path doesn't exist; report still renders.
+- New `render_tab_bar(tabs)` — emits the sticky `<div class="tab-bar">` above panes; only called when `tabs[]` length ≥ 2.
+- `assemble()` extended to accept the new `tabs[]` spec shape. With ≥2 tabs, tab bar + panes are emitted; with 1 tab or no `tabs[]` key, content renders flat (legacy backward-compatible path).
+- `main()` passes `spec_dir` into `assemble()` so `tabs[].source.path` resolves relative to the run directory.
+
+**`templates/report.html`** — c031
+- Sticky `.tab-bar` with pill-style `.tab-button` (dark theme, blue accent for active tab); `.tab-pane` uses `display:none` so inactive panes don't pollute browser scroll history.
+- `.md-content` typography (h1–h4, p, ul/ol, code, links, hr) + `.md-table` styling that matches the CVR-RCA tab's table look so embedded markdown reports don't feel foreign.
+- ~50-line vanilla-JS handler (zero dependencies, zero build step): click handlers on tab buttons, delegated handler on `a[href^="#"]` links that switches tabs when an anchor targets a non-active pane, hash-on-load tab activation, Plotly `Plots.resize` for charts in newly-visible panes. Native `:target` highlight + `scroll-behavior: smooth` are preserved.
+
+**`references/report_structure.md`** — c026
+- New top-level section "Tabbed report structure" — when tabs appear vs flat layout, full spec shape, per-tab keys, cross-tab anchor scheme, citation routing table (which CVR-RCA finding type links to which `#perfaudit-*` anchor), four-pattern citation phrasings mirroring the Slack patterns, visual-differences explainer, conditional-tab logic.
+- "Citation format split" section extended with the perf-audit phrasing (`per perf-audit ↗`, `perf-audit named: <event · date> ↗`).
+
+**`SKILL.md`** — c031
+- Step 3 instruction added: inspect `<run_dir>/perf_audit_report.md`; if present and non-empty (and verdict was not `DATA GAP: no campaigns`), write the multi-tab spec shape; otherwise write the legacy flat spec. CVR-RCA tab is unconditional, perf-audit tab is conditional.
+- Step 2b check #10 extended: every Pattern A/B/C/D citation must carry a `↗` to the routing-table anchor; phrasing and routing spec lives in `report_structure.md`.
+
+### What did not change
+
+- **The perf-audit skill** — runs as-is at `aaradhyaraiHO/perf-audit-skill`. CVR-RCA renders its markdown at report time; the two skills stay independently maintainable.
+- **CVR-RCA tab content** — Sections 1, 2, 3 render exactly as v1.13 inside the first tab. No section was moved or restyled.
+- **`report_spec.json` schema for legacy specs** — flat `{"sections": [...]}` is still accepted. Output for single-tab specs is byte-identical to v1.13.
+- **PyPI dependencies** — none added. The markdown renderer is stdlib-only.
+
+### Why this design
+
+A C-level RCA deliverable needs to be one artifact a stakeholder can open, scroll, and trust — not a folder of files. At the same time, perf-audit's release cadence is owned by a different team; bundling its content into CVR-RCA's HTML at build time (rather than vendoring its code or copying its schemas) is the only design that gives stakeholders one file while keeping the two skills independently maintainable. The tab framework also future-proofs the report: experiment results, supply audits, cohort deep-dives can all become tabs without changing the CVR-RCA tab's structure.
+
+---
+
 ## [v1.13] — 2026-05-22 — Perf-audit companion-skill integration (plug-and-play sub-agent)
 
 **Summary:** CVR-RCA gains a paid-traffic enrichment layer by spawning a separate companion skill — [`perf-audit-skill`](https://github.com/aaradhyaraiHO/perf-audit-skill) — as a background sub-agent whenever the L1 cascade fixes on Paid. Mirrors the Slack fire-and-forget pattern exactly: spawn at the end of the cascade, do not consult during L2+ dimension cuts, read the verdict only at Step 2b synthesis. Two skills stay independent — no schemas, queries, or diagnostic logic moved between them. The sub-agent runs the full perf-audit on the CVR-RCA's pre/post date windows and writes a structured summary (overall verdict, SIS / CPC / Paid CVR trends, campaign status, one-sentence key finding, optional surprise hypothesis) to `<run_dir>/perf_audit_summary.md`. Step 2b check #10 reconciles the verdict using the same four-pattern model as Slack (A direct corroboration, B mechanism explanation, C reframing context, D testable gap, Reject). Funnel data is deliberately excluded from the summary to avoid attribution conflicts with the Mixpanel funnel — CVR-RCA owns the funnel numbers, perf-audit owns the traffic-and-campaign side. Distribution via convention: companion install at `~/.perf-audit-skill/` (added as optional Step 5 in INSTALL.md), with env-var override and sibling-directory + legacy fallbacks. CVR-RCA runs fully without it — if path resolution fails, the run logs `Perf-audit skill not installed — skipped` and continues. The integration is additive evidence, never a gate.
