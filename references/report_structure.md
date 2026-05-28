@@ -6,6 +6,13 @@ Read this file before writing the HTML report (Step 3 of the skill). It defines:
 
 **The principle:** By the time the GM finishes reading Section 2, they know exactly what happened and what to do. Section 3 is for anyone who needs to verify the conclusion. The analysis is not the report — the analysis is the evidence behind the report.
 
+**Pre-write sanity check.** Before writing HTML, verify two items that are the most-often-dropped spec elements regardless of which CE you're analysing:
+
+- **Header** carries the four meta spans — 📅 pre, 📅 post, 🌍 market, 🔗 landing-page URL (per Page Skeleton below).
+- **↗ arrows** are present after every numeric or named-finding claim cluster in the Section 1 callout, and after each Section 2 action card's cause line (per "↗ link-to-table pattern" below).
+
+These two are universal to every report. Other spec items (verdict lines, named TGIDs, source-table accuracy) are story-specific and handled in their respective sections.
+
 ---
 
 ## Styling and language guidelines
@@ -36,6 +43,11 @@ Keep company-specific vocabulary as it is used internally: WBR (Weekly Business 
 - ❌ "An internal weekly report from May 18 shows revenue is 20% lower than last year and we're at 64% of plan."
 
 This rule does NOT override rule 1 — investigation-internal labels (Path A/B, Case A/B/C, locus, lost_checkouts_delta) are not Headout-native jargon; they are skill-internal terms and must still be translated to business language in the report.
+
+**6. Plain English for derived metrics.**
+Numbers like `structural_delta_cvr` (current Δ minus LY Δ) collapse two comparisons into one figure — the gap matters more than the figure does. When citing one in a callout or verdict, unpack it once: what LY did over the same window, what we did, what the gap means (an improvement vs the seasonal baseline, or a decline that is worse than headline suggests). After the first unpacking in a section, use the shorthand.
+- ✅ "Last year over the same window CVR fell 1.07pp; we rose 0.62pp despite that seasonal pressure, so the underlying gain vs the seasonal baseline is +1.69pp."
+- ❌ "Structural ΔCVR is +1.69pp after stripping seasonality (LY −1.07pp)."
 
 ---
 
@@ -96,6 +108,20 @@ When the Slack timeframe **matches** the report's pre/post window, light attribu
 ### Slack corroboration upgrades evidence on confirmed findings
 
 When Slack confirms a mechanism that has already been CONFIRMED via data — particularly on declines, where the action card is going to a DRI for execution — elevate the citation from a bare `(corroborated ↗)` parenthetical to an inline named source: `(per [Author · date] ↗)`. Naming the source raises stakeholder confidence: it moves a finding from "we measured it" to "we measured it AND the BDM/Supply/Marketing team has independent corroboration." Use this on the verdict subtext of the analysis block where the data-driven finding lives. Do not stack the same citation across multiple subtexts — one elevation per finding.
+
+### When Slack context is unavailable
+
+If `slack_context.md` was not available at write-time — the sub-agent timed out, returned after Step 3 was completed, or hit a permission denial — render a small disclosure card inside the Market Context block. Never silently drop the Slack lens; give the reader a path forward.
+
+```html
+<div style="background:#f3f4f6;border-left:4px solid #8892a4;border-radius:0 6px 6px 0;padding:10px 14px;margin-top:16px;font-size:13px;color:#444;">
+  <strong>Slack context not included in this run.</strong>
+  [One line on why — e.g., "Sub-agent took longer than the wait window; returned ~22 min later." or "#mkt-france read denied by Slack permissions."]
+  To enrich this report with the Slack lens, re-run with the Claude Code context extension and request a Slack pass on this CE.
+</div>
+```
+
+Use this card whenever Slack didn't reach the report, regardless of CVR direction. Remove it when Slack signals are present — the Market Context table is then the disclosure.
 
 ### ↗ link-to-table pattern
 
@@ -773,6 +799,7 @@ Do not show separate tables for dimensions that produced no signal. The ruled-ou
 | Investigation-internal terminology in the report body (Step 1/2/3, Path A/B, Case A/B/C, "locus", "lost_checkouts_delta", "candidate TGIDs") | These are transcript terms — they mean nothing to a GM or stakeholder. Translate: "the three most-affected experiences" not "the Case B candidate TGIDs"; "supply checked and ruled out" not "Step 3 confirmed supply ruled out". |
 | Daily inventory time-series rendered as an HTML table | A 27-row × 4-column date table is unreadable at a glance. The daily time-series is always Plotly line charts. The only table in the inventory section is the TID snapshot summary. |
 | Standalone analysis block that restates a conclusion already shown in a prior block | If a sub-step breakdown (e.g., C2A/A2O) concludes the same thing as an experience mix table that came just before it, the sub-step block adds no new information. Fold the one new data point into the existing block's subtext paragraph and remove the standalone block. Every block in the report should add something the prior block didn't show. |
+| `days_to_first_available_date` presented as the primary supply evidence | It is a single-integer proxy from `product_rankings_features` ("how far out is the first bookable slot?") — collapses real bucketed ticket counts into a yes/no signal. The canonical supply evidence is `inventory_availability` ticket counts per lead-time bucket. The proxy belongs in a corroborating footnote at most, regardless of CVR direction. |
 
 ---
 
@@ -1765,4 +1792,5 @@ Plotly.newPlot('trend-90day', traces90d, {
 | c022 | 2026-05-14 | Section 2 action card spec — added evidence threshold rule: before creating a standalone action card, verify both the rate drop and raw event count. Directional signals from small samples belong as a sub-bullet inside the most relevant existing card, not as a standalone card. Example sub-bullet wording provided. |
 | c023 | 2026-05-14 | Section 3 "What belongs in Section 3" — added fixed ordering for always-present blocks (numbered 1–8: mix cascade + Fixed Segment banner → Geo/Non-Geo → Shapley → daily trend → primary driver cuts → secondary driver evidence → ruled-out dimensions → hypotheses explored). Conditional blocks (inventory, session recordings, price) slot within primary driver evidence. Replaces the previous unordered table header which gave no sequencing signal. |
 | c024 | 2026-05-08 | Added "URL-level breakdown block" HTML pattern section, placed before the inventory section format. Fills the gap where the "What belongs in Section 3" table listed "URL-level breakdown" with no format spec. Two verdict forms: performance verdict (rate dropped, share held) and routing verdict (share shifted, rates held). Table columns: URL · Period · Users · % of LP · LP2S · S2C · C2O · CVR. `.highlight-row` on URLs where rate dropped meaningfully or `pct_of_lp` shifted substantially. Pointer to the dedicated URL breakdown query in `context.md` (not the canonical L2+ query — that query does not produce `pct_of_lp`). |
+| c026 | 2026-05-27 | Four direction-agnostic changes driven by CE 252 (Louvre) RCA learnings. **(1) Pre-write sanity check** at top of file — two universal items every report must verify before writing: header carries the four meta spans (📅 pre, 📅 post, 🌍 market, 🔗 landing-page URL); ↗ arrows present in Section 1 callout and Section 2 action card cause-lines. Universal regardless of CVR direction or CE. **(2) Styling rule 6 — plain English for derived metrics** (e.g., `structural_delta_cvr`). When citing a derived metric in a callout, unpack it once in GM-readable language (what LY did, what we did, what the gap means) rather than analyst shorthand. Direction-agnostic — applies whether structural delta is positive or negative. **(3) "When Slack context is unavailable"** subsection in Slack integration — small disclosure card pattern rendered inside the Market Context block when slack_context.md was not available at write-time (timeout, late return after Step 3, permission denial). Replaces the silent-skip failure mode. Direction-agnostic. **(4) Anti-pattern row** added: `days_to_first_available_date` as primary supply evidence. It is a single-integer proxy from `product_rankings_features`; canonical supply evidence is `inventory_availability` ticket counts per lead-time bucket. Applies to both supply expansion (improvement) and supply depletion (decline) findings. Companion changes in `context.md` c016 (canonical-source rule on the table) and `hypothesis.md` c019 (proxy demoted in S2C decline + S2C improvement + Pattern 4). |
 | c025 | 2026-05-22 | Major styling expansion driven by CE 1223 (Pompeii) RCA learnings — bidirectional support and Slack integration. **Slack integration:** new "Slack integration & link-to-table styling" section consolidates three-layer model (narrative weaving / Important Context callout-item / Market Context Section 3 block), four-pattern classification (A/B/C/D), timeframe-citation rule, one-citation-per-concept rule, Slack-corroboration-upgrades-evidence rule for declines. Section 3 ordering gains item 6.5 (Market context & operational signals, conditional). New HTML pattern for Market Context block (3-column table, generic title — never bake channel name into heading). **Link-to-table:** every Section 3 `.analysis-block` carries an `id` attribute; canonical anchor ID convention listed. New ↗ ref-link CSS (`.ref-link`, `html { scroll-behavior: smooth }`, `.analysis-block:target` highlight). Usage rules: ↗ in Section 1 callout, Section 2 action cards, Hypotheses Explored "Test run" column; never inside Section 3 verdict lines or subtexts. Citation format split: bare `↗` for internal navigation; `Source · date ↗` for Slack citations. **Bidirectional support:** Section 1c CVR-improved variant gains magnitude threshold for "What's holding it back" (<~10% of total ΔCVR → fold into sub-bullet); Section 2 gains improvement-direction action card sub-spec (Protect / Extend / Investigate-headwind templates). **Styling rule 5 (new):** preserve Headout-native jargon (WBR, SP, GBV, RR vs plan, TGID, TID, VID, CR%, FabriGPT, etc.) — paraphrasing reduces trust. Does not override rule 1 — investigation-internal labels (Path A/B, Case A/B/C) still translated. **Shapley sign-aware rule:** flex bar handles mixed-sign contributions cleanly — absolute-value flex + sign prefix for mild offsets (<20%), or net-positive flex only for large offsets (>25%). **D3 — Weekday composition Section 3 block** added to "What belongs in Section 3" table — renders only when material and the report attributes any portion of the move to weekday imbalance. |
