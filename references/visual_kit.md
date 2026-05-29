@@ -339,6 +339,40 @@ When any of those fail, write the report as a single-tab flat layout — no `.ta
   header .meta { margin-top: 8px; font-size: 13px; color: #b0bec5; }
   header .meta span { margin-right: 20px; }
 
+  /* Dashboards row — optional row below .meta carrying pill-button links to
+     external dashboards scoped to the same entity (CE) as the report.
+     Chrome lives here; URLs are owned by the consuming skill's structure file
+     (e.g., CVR-RCA's report_structure.md "Dashboards row" section). */
+  header .dashboards {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  header .dash-label {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #8892a4;
+    margin-right: 4px;
+  }
+  header .dash-link {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.14);
+    color: #c8cfe0;
+    text-decoration: none;
+    padding: 4px 12px;
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background 0.15s, color 0.15s;
+  }
+  header .dash-link:hover {
+    background: rgba(255,255,255,0.16);
+    color: #fff;
+  }
+
   .container { max-width: 1050px; margin: 0 auto; padding: 0 24px 60px; }
 
   .section-label {
@@ -565,6 +599,15 @@ Naming convention: `block-<kebab-name>` for tables and text blocks, `chart-<keba
     <span>📅 Post: [post_start]–[post_end]</span>
     <span>🌍 [Market] · [Country]</span>
     <span>🔗 <a href="[top_page_url]" target="_blank" style="color:#b0bec5;text-decoration:underline;">[top_page_url]</a></span>
+  </div>
+  <!-- Optional: dashboards row — see the consuming skill's structure file
+       for URL templates (e.g., CVR-RCA's report_structure.md
+       "Dashboards row — Omni + Sentra" section). Omit the entire div if the
+       skill defines no external dashboards. -->
+  <div class="dashboards">
+    <span class="dash-label">DASHBOARDS</span>
+    <a href="[skill-defined URL]" target="_blank" class="dash-link">[Label] ↗</a>
+    <!-- repeat per dashboard -->
   </div>
 </header>
 
@@ -891,3 +934,10 @@ Plotly.newPlot('trend-90day', traces90d, {
 ```
 
 ---
+
+## Changelog
+
+| # | Date | Changes |
+|---|------|---------|
+| c001 | 2026-05-28 | Initial version. Skill-agnostic visual primitives extracted from `cvr-rca/references/report_structure.md` (v1.19): shared `<style>` block (CSS for header / container / metric cards / callout / action cards / analysis blocks / verdict lines / tables / shapley flex bar / fixed segment banner / ref-link / tab bar / md-content); Page skeleton; Section label; Metric cards HTML; Root cause callout HTML (Shape A paragraph + Shape B multi-driver bullet); Action card HTML; Analysis block (general pattern); Table with highlight rows; Plotly chart conventions; Anchor ID convention; Styling and language guidelines (rules 1–7); Slack integration & link-to-table styling; Tabbed report structure (full HTML pattern); Anti-patterns. Read by any skill producing an HTML report. |
+| c002 | 2026-05-28 | Dashboards row chrome added to header CSS — `.dashboards`, `.dash-label`, `.dash-link` rules support an optional row of pill-button links to external dashboards scoped to the same entity as the report. Page skeleton example gains a placeholder `<div class="dashboards">` block inside `<header>`, with a comment noting the consuming skill's structure file owns the URL templates. Chrome only — URLs are skill-specific (CVR-RCA carries Omni + Sentra in its `report_structure.md` "Dashboards row" section). Companion change in `cvr-rca/references/report_structure.md` c032 (Omni + Sentra URL templates). |

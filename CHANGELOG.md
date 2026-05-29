@@ -4,6 +4,33 @@ This file tracks every meaningful change pushed to this repository. Each entry c
 
 ---
 
+## [Unreleased] — v1.20 — Header dashboards row (Omni + Sentra)
+
+**Summary:** Every CVR-RCA report header now carries a `.dashboards` row with two pill-button links to external CE-scoped analytics dashboards — Omni Analytics and Sentra. Analysts can jump from the report into either dashboard in one click, with the CE filter pre-applied. The chrome (`.dashboards`, `.dash-label`, `.dash-link` CSS plus a placeholder block in the Page skeleton) lives in the shared `visual_kit.md` so any future skill emitting an HTML report can reuse the same pill style. The two specific URL templates (Omni dashboard ID + filter IDs; Sentra base URL) live in CVR-RCA's `report_structure.md` because they are CE-analytics knowledge, not generic chrome. Only the CE ID is substituted at write time — Omni's date params are constant (the dashboard has built-in pre/post comparison logic for last-30-days vs prior-30-days, independent of the RCA's actual pre/post windows); Sentra defaults to its own 30-day window with no URL date parameters available.
+
+### Changes by file
+
+**`references/visual_kit.md`** — c002
+- Header CSS gains three rules (`header .dashboards`, `header .dash-label`, `header .dash-link`) for the pill-button row below the existing `.meta` line. Recessed-button styling that visually distinguishes external links from the static meta info.
+- Page skeleton example gains a placeholder `<div class="dashboards">` block inside `<header>`, with a comment noting the consuming skill's structure file owns the URL templates.
+- Initial Changelog table added to the file (c001 for the v1.19 initial extraction; c002 for this change). The file previously had no changelog table; this commit establishes one going forward.
+
+**`references/report_structure.md`** — c032
+- New "Header — CVR-RCA-specific extensions" section inserted at the top of the file (above "Section 1 — Executive Summary"). Documents the Omni + Sentra URL templates with explicit substitution rules.
+- Pre-write sanity check gains a third item: the dashboards row must be populated with both links before the report is considered done.
+
+### What did not change
+
+- The rest of the header chrome (eyebrow, h1, meta row with 📅 / 🌍 / 🔗 spans) — unchanged.
+- The dashboards row is unconditional — rendered on every CVR-RCA report regardless of CE or RCA direction. No conditional logic.
+- Perf-audit's standalone HTML report — does not (yet) emit the dashboards row. The chrome is now available in the shared `visual_kit.md` if perf-audit-skill later wants to add its own dashboard URLs; that's a separate change in the perf-audit repo.
+
+### Why this design
+
+Analysts running an RCA almost always want to cross-reference the CE in Omni or Sentra during interpretation — for traffic decomposition, channel attribution, or month-over-month context the RCA report doesn't carry. Putting the links in the header (rather than buried in Section 3 or a footer) treats them as part of the orientation chrome alongside the pre/post dates and the landing-page URL — which is exactly the analyst's mental model. The chrome/URL split between `visual_kit.md` and `report_structure.md` honors the v1.19 architecture: shared visual primitives go in the kit; skill-specific content (these specific dashboard URLs) goes in the skill's structure file. Future skills emitting HTML reports can adopt the same pill style with one CSS reference; they only need to define their own URL templates.
+
+---
+
 ## [Unreleased] — v1.19 — Visual kit extraction + perf-audit HTML output + Tab 2 embed-from-HTML
 
 **Summary:** Generalize the report visual system so multiple skills can produce HTML reports in the same visual language without copy-paste drift. Extract skill-agnostic visual primitives (CSS, HTML patterns for metric cards / callouts / action cards / analysis blocks / tables / tab framework / ↗ link-to-table pattern / Slack integration / styling rules / Plotly conventions) from `references/report_structure.md` into a new shared file `references/visual_kit.md`. The remaining content in `report_structure.md` is CVR-RCA-specific structure (Section 1/2/3 macro layout, "What belongs in Section 3" table, CVR-RCA-specific block specs). Perf-audit gets a parallel `references/perf_audit_structure.md` that defines its own section layout on top of the same `visual_kit.md` (an identical copy lives in the perf-audit-skill repo). The perf-audit skill now emits both `perf_audit_report.md` (canonical text record, unchanged) AND `perf_audit_report.html` (NEW polished standalone HTML deliverable, self-contained with visual_kit CSS inlined). CVR-RCA's Step 3 Tab 2 rendering switches from "read markdown + render to HTML inline" to "read perf-audit's HTML, extract body content, paste verbatim" — a byte-paste rather than a comprehension step. Visual quality goes up (both tabs share `visual_kit.md` so they look visually identical); Claude's reading load goes down (no markdown→HTML conversion at Step 3); RCA quality is structurally insulated (perf-audit's investigation phase remains format-agnostic; the HTML render happens after all conclusions are reached). Markdown artifacts remain Claude's input for Step 2b reconciliation reasoning — verbose HTML never enters Claude's reasoning context.

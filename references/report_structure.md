@@ -4,12 +4,55 @@ Read `visual_kit.md` first for CSS, HTML patterns, and styling rules. This file 
 
 **The principle:** By the time the GM finishes reading Section 2, they know exactly what happened and what to do. Section 3 is for anyone who needs to verify the conclusion. The analysis is not the report — the analysis is the evidence behind the report.
 
-**Pre-write sanity check.** Before writing HTML, verify two items that are the most-often-dropped spec elements regardless of which CE you're analysing:
+**Pre-write sanity check.** Before writing HTML, verify three items that are the most-often-dropped spec elements regardless of which CE you're analysing:
 
 - **Header** carries the four meta spans — 📅 pre, 📅 post, 🌍 market, 🔗 landing-page URL (per Page Skeleton in `visual_kit.md`).
+- **Dashboards row** carries the Omni link (CE ID substituted) and the Sentra link (CE ID substituted) per "Header — CVR-RCA-specific extensions" below.
 - **↗ arrows** are present after every numeric or named-finding claim cluster in the Section 1 callout, and after each Section 2 action card's cause line (per "↗ link-to-table pattern" in `visual_kit.md`).
 
-These two are universal to every report. Other spec items (verdict lines, named TGIDs, source-table accuracy) are story-specific and handled in their respective sections.
+These are universal to every CVR-RCA report. Other spec items (verdict lines, named TGIDs, source-table accuracy) are story-specific and handled in their respective sections.
+
+---
+
+## Header — CVR-RCA-specific extensions
+
+The header chrome (eyebrow, h1, meta row, dashboards row container) is defined in `visual_kit.md → Page skeleton`. This section defines the CVR-RCA-specific content that fills the dashboards row.
+
+### Dashboards row — Omni + Sentra
+
+Every CVR-RCA report header carries a `.dashboards` row beneath the meta line with two pill-button links scoped to the CE. The CSS chrome (`.dashboards`, `.dash-label`, `.dash-link`) lives in `visual_kit.md`; the URL templates are defined here.
+
+**Omni Analytics dashboard.** Filter to the CE ID. Date params are constant — the Omni dashboard has built-in pre/post comparison logic that compares the last 30 days against the previous 30 days, so we always pass `30 complete days ago` + `30 days` regardless of the RCA's actual pre/post windows.
+
+URL template (URL-encoded — copy verbatim; only substitute `<CE_ID>`):
+
+```
+https://headout.omniapp.co/dashboards/5368ab53?f--iv8lWOuS=%7B%22values%22%3A%5B%22<CE_ID>%22%5D%7D&f--uvd3KWWJ=%7B%22left_side%22%3A%2230+complete+days+ago%22%2C%22right_side%22%3A%2230+days%22%7D
+```
+
+Substitution: `<CE_ID>` → the CE ID as a string (e.g., `243`, `3593`). No other substitutions — date params and dashboard ID stay constant.
+
+**Sentra.** Filter to the CE ID. Sentra defaults to its own time window (last 30 days); the date range is not configurable via URL.
+
+URL template:
+
+```
+https://sentra-analytics.headout.com/analysis/<CE_ID>
+```
+
+Substitution: `<CE_ID>` → the CE ID.
+
+**HTML emitted in the report header** (replaces the placeholder `<div class="dashboards">` block shown in `visual_kit.md → Page skeleton`):
+
+```html
+<div class="dashboards">
+  <span class="dash-label">DASHBOARDS</span>
+  <a href="[Omni URL with CE_ID substituted]" target="_blank" class="dash-link">Omni ↗</a>
+  <a href="[Sentra URL with CE_ID substituted]" target="_blank" class="dash-link">Sentra ↗</a>
+</div>
+```
+
+Render both links on every CVR-RCA report — no conditional logic. If a future RCA targets a CE that doesn't have Omni or Sentra coverage, the links still resolve (the dashboards will just show empty state), which is acceptable.
 
 ---
 
@@ -1019,6 +1062,7 @@ date, or event that matches the finding.
 | c022 | 2026-05-14 | Section 2 action card spec — added evidence threshold rule: before creating a standalone action card, verify both the rate drop and raw event count. Directional signals from small samples belong as a sub-bullet inside the most relevant existing card, not as a standalone card. Example sub-bullet wording provided. |
 | c023 | 2026-05-14 | Section 3 "What belongs in Section 3" — added fixed ordering for always-present blocks (numbered 1–8: mix cascade + Fixed Segment banner → Geo/Non-Geo → Shapley → daily trend → primary driver cuts → secondary driver evidence → ruled-out dimensions → hypotheses explored). Conditional blocks (inventory, session recordings, price) slot within primary driver evidence. Replaces the previous unordered table header which gave no sequencing signal. |
 | c024 | 2026-05-08 | Added "URL-level breakdown block" HTML pattern section, placed before the inventory section format. Fills the gap where the "What belongs in Section 3" table listed "URL-level breakdown" with no format spec. Two verdict forms: performance verdict (rate dropped, share held) and routing verdict (share shifted, rates held). Table columns: URL · Period · Users · % of LP · LP2S · S2C · C2O · CVR. `.highlight-row` on URLs where rate dropped meaningfully or `pct_of_lp` shifted substantially. Pointer to the dedicated URL breakdown query in `context.md` (not the canonical L2+ query — that query does not produce `pct_of_lp`). |
+| c032 | 2026-05-29 | **Dashboards row added to the header — Omni + Sentra URL templates.** New "Header — CVR-RCA-specific extensions" section at the top of the file documents the two URL templates the dashboards row carries: Omni Analytics (`https://headout.omniapp.co/dashboards/5368ab53?f--iv8lWOuS=...&f--uvd3KWWJ=30+complete+days+ago+30+days` with only `<CE_ID>` substituted — date params constant because the Omni dashboard has built-in pre/post comparison logic) and Sentra (`https://sentra-analytics.headout.com/analysis/<CE_ID>` — Sentra defaults to its own 30-day window, no URL date params available). Pre-write sanity check at the top of the file gains a third item ensuring the dashboards row is populated. HTML pattern shown explicitly — `<div class="dashboards">` with the `DASHBOARDS` label and two pill-button links (`Omni ↗`, `Sentra ↗`). Renders on every CVR-RCA report unconditionally. Chrome (`.dashboards`, `.dash-label`, `.dash-link` CSS + the placeholder block in the Page skeleton) lives in `visual_kit.md` c002; URLs are CVR-RCA-specific and live here. |
 | c031 | 2026-05-29 | **Split into `visual_kit.md` + this file.** Skill-agnostic primitives (CSS, HTML patterns for header/metric-cards/callout/action-card/analysis-block/tables, styling rules 1–7, Slack integration & ↗ link-to-table pattern, Tabbed report structure, Anti-patterns, Plotly chart conventions, Anchor ID convention) moved to `references/visual_kit.md`. This file now contains only CVR-RCA-specific content: Section 1/2/3 macro-structure, "What belongs in Section 3" table, CVR-RCA-specific block specs (URL-level breakdown, Inventory format, Session recordings, Ruled-out, Mix cascade analysis block, Fixed Segment banner, Geo/Non-Geo overview, Market context, Shapley decomposition, Hypotheses explored), Report length calibration. Companion changes in `visual_kit.md` (new file c001), perf-audit-skill's `perf_audit_structure.md` (new file c001), perf-audit-skill SKILL.md (emit `perf_audit_report.html` alongside `.md`), CVR-RCA SKILL.md Step 3 (Tab 2 embeds extracted HTML body content, falling back to markdown render if HTML missing). Driven by the v1.16 reasoning that the Claude-writes-HTML model needs a clean separation between shared primitives and per-skill structure to scale to multiple report types. |
 | c030 | 2026-05-28 | **Bulleted shape added to Section 1 callout.** Section 1c spec documents two answer shapes inside each `.callout-item .a`: paragraph (single mechanism, today's default) and lead claim + bullet list (multi-driver). Pick the shape that matches the finding — no threshold rule, no word cap, just judgment. New styling rule 7 makes the preference explicit ("prefer the bullet shape when a callout enumerates drivers"). Visual Spec gains CSS for `.callout-item .a ul/li` (tight bullet spacing inside the existing 15px callout text) and a new "Shape B — multi-driver" HTML pattern alongside the existing single-mechanism pattern. Shape A and Shape B can mix within the same callout — each `.callout-item` makes the choice independently. Driven by the observation that multi-mechanism CVR-improvement and decline callouts were degrading to dense paragraphs with inline `(1)/(2)/(3)` markers, making the most-scanned section of the report the hardest to scan. |
 | c029 | 2026-05-28 | **Tab framework documented as an HTML pattern, not a render-pipeline spec.** "Tabbed report structure → Spec shape" section rewritten as a copy-pasteable HTML pattern (tab bar outside `.container`, two `.tab-pane` wrappers inside). New "Perf-audit tab rendering — markdown → HTML inline" subsection documents the verbatim markdown-to-HTML conversion Claude performs when writing the report. Single-tab / flat-layout instruction clarified: omit the `.tab-bar` and `.tab-pane` wrappers entirely, do not emit vestigial tab markup. Section 3 "What belongs" table rewritten — the two escape-hatch component rows (`analysis_block`, `raw_html`) replaced with a single "Custom analysis block" row that points to the `.analysis-block` HTML pattern. Section opener text updated to reflect the Claude-writes-HTML model. Companion changes in `SKILL.md` c033 (Step 3 reverted) and the `/cvr-rca` slash-command (Step 3 reverted). Driven by CE 243 RCA where the render.py output visibly degraded vs CE 252's hand-authored quality. |
