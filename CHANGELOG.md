@@ -4,6 +4,44 @@ This file tracks every meaningful change pushed to this repository. Each entry c
 
 ---
 
+## [Unreleased] — v1.19 — Visual kit extraction + perf-audit HTML output + Tab 2 embed-from-HTML
+
+**Summary:** Generalize the report visual system so multiple skills can produce HTML reports in the same visual language without copy-paste drift. Extract skill-agnostic visual primitives (CSS, HTML patterns for metric cards / callouts / action cards / analysis blocks / tables / tab framework / ↗ link-to-table pattern / Slack integration / styling rules / Plotly conventions) from `references/report_structure.md` into a new shared file `references/visual_kit.md`. The remaining content in `report_structure.md` is CVR-RCA-specific structure (Section 1/2/3 macro layout, "What belongs in Section 3" table, CVR-RCA-specific block specs). Perf-audit gets a parallel `references/perf_audit_structure.md` that defines its own section layout on top of the same `visual_kit.md` (an identical copy lives in the perf-audit-skill repo). The perf-audit skill now emits both `perf_audit_report.md` (canonical text record, unchanged) AND `perf_audit_report.html` (NEW polished standalone HTML deliverable, self-contained with visual_kit CSS inlined). CVR-RCA's Step 3 Tab 2 rendering switches from "read markdown + render to HTML inline" to "read perf-audit's HTML, extract body content, paste verbatim" — a byte-paste rather than a comprehension step. Visual quality goes up (both tabs share `visual_kit.md` so they look visually identical); Claude's reading load goes down (no markdown→HTML conversion at Step 3); RCA quality is structurally insulated (perf-audit's investigation phase remains format-agnostic; the HTML render happens after all conclusions are reached). Markdown artifacts remain Claude's input for Step 2b reconciliation reasoning — verbose HTML never enters Claude's reasoning context.
+
+### Changes by file
+
+**`references/visual_kit.md`** — NEW file (c001 in its own changelog)
+- Skill-agnostic visual primitives extracted from `report_structure.md`. Contains: shared `<style>` block (CSS for header / container / metric cards / callout / action cards / analysis blocks / verdict lines / tables / shapley flex bar / fixed segment banner / ref-link / tab bar / md-content); Page skeleton; Section label; Metric cards HTML; Root cause callout HTML (Shape A paragraph + Shape B multi-driver bullet); Action card HTML; Analysis block (general pattern); Table with highlight rows; Plotly chart conventions; Anchor ID convention; Styling and language guidelines (rules 1–7); Slack integration & link-to-table styling; Tabbed report structure (full HTML pattern); Anti-patterns.
+- Preamble names the file as the report visual kit — any skill producing an HTML report reads this for primitives.
+
+**`references/report_structure.md`** — c031
+- Trimmed to CVR-RCA-specific content only. Removed: Styling guidelines, Slack integration, Tab framework, Anti-patterns, Visual Spec (CSS + generic component HTML patterns), Plotly conventions, Anchor ID convention (all moved to visual_kit.md).
+- Kept: Section 1/2/3 macro-structure, "What belongs in Section 3" table, URL-level breakdown block, Inventory section format, Session recordings format, Ruled-out dimensions section + block, Mix cascade analysis block, Fixed Segment banner, Geo / Non-Geo overview block, Market context block, Shapley decomposition block, Hypotheses Explored block, Report length calibration.
+- Added preamble pointing to visual_kit.md. Reordered to nest CVR-RCA-specific block specs under a new "## CVR-RCA-specific block specs" h2 parent.
+
+**`SKILL.md`** — c035
+- File-role descriptions updated: `report_structure.md` renamed as "CVR-RCA-specific report structure"; new `visual_kit.md` description as "shared visual primitives" added.
+- Step 3 lazy-load instruction extended to read `visual_kit.md` alongside `actions.md` + `report_structure.md`.
+- Step 3 "Tab framework — when to use it" subsection rewritten: read `perf_audit_report.html`, extract body content, paste verbatim. Fallback to legacy md→HTML render if HTML missing.
+
+**Perf-audit-skill repo** (paired release, separate repo)
+- New `references/perf_audit_structure.md` (c001) defines perf-audit's section layout on top of visual_kit primitives. Section 1 (verdict callout + 5 metric cards), Section 2 (Recommended Actions with Diagnose-and-fix / Audit-and-document / Scale-with-guardrails sub-templates), Section 3 (8–9 supporting analysis blocks: CE Overview, Channel Breakdown, Paid Deep Dive, CPC 3-Lens, Coverage + Matchmaking, Funnel Reconciliation, External Dynamics, Red Flags, Monthly Trajectory). Anchor scheme `perfaudit-<slug>`. Custom-block guidance for novel findings. Embedding spec for CVR-RCA Tab 2.
+- New `references/visual_kit.md` — byte-identical copy of cvr-rca's. Manual sync policy documented (when visual_kit changes in cvr-rca, copy to perf-audit; revisit if a third user appears).
+- `SKILL.md` gains Step 6 — Write HTML report. Lazy-loads visual_kit.md + perf_audit_structure.md at this step. Renders `perf_audit_report.html` from the same intermediate findings as the markdown (no new investigation work). Markdown artifact unchanged.
+
+### What did not change
+
+- Investigation logic. Perf-audit Steps 0–5 unchanged; CVR-RCA Steps 1–2b unchanged.
+- Markdown artifacts. `perf_audit_summary.md` and `perf_audit_report.md` are still produced and still the canonical text record. They remain Claude's input for Step 2b reconciliation reasoning. HTML is opaque at the embed step.
+- The visual language. CVR-RCA reports look identical to v1.18 output (same chrome, same patterns — just now read from visual_kit.md instead of report_structure.md).
+- Cross-tab anchor scheme, citation routing table, four-pattern citation phrasings.
+
+### Why this design
+
+The v1.18 architecture had perf-audit emit markdown only, and CVR-RCA rendered that markdown to HTML inline inside Tab 2. Two problems: (1) every CVR-RCA run re-did the markdown→HTML conversion, paying tokens for work that could be done once inside perf-audit; (2) the inline render used `.md-content` styling rather than visual_kit's polished `.analysis-block` chrome, so Tab 2 visually felt foreign next to Tab 1. v1.19 fixes both by having perf-audit emit HTML directly using the same visual_kit both skills now share. The investigation phase stays format-agnostic — perf-audit reaches all its conclusions before the HTML render at Step 6 — so RCA quality is structurally insulated from the format change. And the extracted visual_kit is the foundation for the next skill that produces HTML reports (experiment-RCA, supply-RCA, etc.): they reference the same primitives, define their own structure file, and bundle into CVR-RCA's tab framework with no additional engineering.
+
+---
+
 ## [Unreleased] — v1.18 — Bulleted shape for Section 1 callout
 
 **Summary:** Section 1 callout answers gain a second shape — lead claim + bullet list — for multi-mechanism findings. The existing paragraph form remains the default for single-mechanism findings; Claude picks the shape that matches the finding. No threshold rule, no word cap. New styling rule 7 makes the preference explicit ("prefer the bullet shape when a callout enumerates drivers"). The bullet form is documented in the Visual Spec with its own CSS and HTML pattern so it inherits the existing callout typography (15px dark text) and ↗ ref-link placement convention.

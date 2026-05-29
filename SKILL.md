@@ -74,8 +74,15 @@ hypotheses for each confirmed scenario. Read this at Step 2 before forming any b
 **`actions.md`** — cause-to-action mapping. Once a root cause is confirmed, find
 the matching category here and use the listed actions for the report's action cards.
 
-**`report_structure.md`** — output structure and visual spec. The fixed three-section
-layout every report follows. Read before writing Step 3.
+**`report_structure.md`** — CVR-RCA-specific report structure. Section 1/2/3
+macro-layout, "What belongs in Section 3" table, CVR-RCA-specific block specs
+(Mix cascade, Fixed Segment banner, Geo overview, Shapley flex bar, Hypotheses
+Explored, etc.). Read at Step 3, alongside `visual_kit.md`.
+
+**`visual_kit.md`** — shared visual primitives. CSS, HTML patterns for header /
+metric cards / callout / action cards / analysis blocks / tables / tab framework /
+↗ link-to-table pattern / Slack integration. Skill-agnostic — any HTML-report-
+producing skill reads this. Read at Step 3, alongside `report_structure.md`.
 
 ---
 
@@ -902,6 +909,7 @@ Once all open items are resolved or explicitly accepted, proceed to Step 3.
 
 ```bash
 cat "$SKILL_DIR/references/actions.md"
+cat "$SKILL_DIR/references/visual_kit.md"
 cat "$SKILL_DIR/references/report_structure.md"
 ```
 
@@ -917,23 +925,42 @@ and the styling guidelines. Source every claim from `findings.md`. Write the
 output to: `<run_dir>/report.html`.
 
 **No spec JSON, no render.py.** The report is a single hand-authored HTML
-file. The full visual spec lives in `report_structure.md → "Visual Spec — HTML
-patterns"` — copy the CSS block into the report's `<head>`, follow the per-
-component HTML patterns for metric cards, callouts, action cards, analysis
-blocks, tables, and the tab framework. Freedom to add novel evidence is total
-— there is no component dispatcher to constrain you. The visual guardrails
-come from the patterns in `report_structure.md`, not from a render pipeline.
+file. The visual primitives (CSS, HTML patterns for metric cards / callouts /
+action cards / analysis blocks / tables / tab framework / ↗ link-to-table
+pattern / Slack integration / styling rules) live in `visual_kit.md`. The
+CVR-RCA-specific structure (Section 1/2/3 macro layout, "What belongs in
+Section 3" table, Mix cascade block, Fixed Segment banner, Geo overview,
+Shapley flex bar, Hypotheses block, etc.) lives in `report_structure.md`.
+Read both — `visual_kit.md` for the shared visual language, `report_structure.md`
+for the CVR-RCA-specific layout on top of it. Freedom to add novel evidence
+is total: when the investigation surfaces a finding that doesn't match any
+standard block, write a custom `.analysis-block` following the HTML pattern
+in `visual_kit.md`.
 
-**Tab framework — when to use it.** Inspect `<run_dir>/perf_audit_report.md`.
-If the file exists and is non-empty AND the perf-audit verdict was not
-`DATA GAP: no campaigns`, write the report as a two-tab document:
+**Tab framework — when to use it.** Inspect `<run_dir>/perf_audit_report.html`
+(the polished HTML deliverable that perf-audit now emits as a sibling of its
+markdown report). If the file exists and is non-empty AND the perf-audit
+verdict was not `DATA GAP: no campaigns`, write the report as a two-tab document:
 
 - **Tab 1 — CVR RCA**: Sections 1, 2, 3 as documented in `report_structure.md`.
-- **Tab 2 — Paid Performance Audit**: render `perf_audit_report.md` to HTML
-  inline (preserve content verbatim — markdown syntax → HTML tags only, no
-  rewording of claims, numbers, or table cells). Anchor IDs on each heading
-  follow the `perfaudit-<slug>` scheme so cross-tab `↗` links from the CVR-RCA
-  tab work.
+- **Tab 2 — Paid Performance Audit**: read `perf_audit_report.html`, extract
+  the body content (everything between `<body>` and `</body>`, stripping any
+  `<header>` inside — CVR-RCA emits its own header), and paste verbatim inside
+  `<div class="tab-pane" id="tab-perfaudit">`. **This is a byte-paste, not a
+  comprehension step** — the HTML carries its own anchor IDs (`perfaudit-<slug>`),
+  headings, and chrome from `visual_kit.md`. No markdown→HTML conversion needed;
+  the rendering has already been done by perf-audit using the same `visual_kit.md`
+  the CVR-RCA report carries, so the embedded content inherits CVR-RCA's CSS
+  styling and looks visually identical to the surrounding Tab 1 content.
+
+**Fallback for older perf-audit versions.** If `perf_audit_report.html` is
+missing (older perf-audit version that only emits `perf_audit_report.md`),
+fall back to the legacy v1.16 behavior: read `perf_audit_report.md` and render
+markdown → HTML inline inside Tab 2, preserving content verbatim, applying the
+`perfaudit-<slug>` anchor scheme to headings during conversion. This path is
+slower (Claude does the conversion) and less visually consistent (the inline
+md→HTML render uses `.md-content` styling rather than visual_kit's analysis-block
+chrome), so prefer the HTML embed when available.
 
 Otherwise (perf-audit didn't run, returned empty, was DATA GAP, or the cascade
 fixed on Organic), write a single-tab (flat) report — no tab bar. The full HTML
@@ -1073,6 +1100,7 @@ not generic "investigate further" text.
 | c029 | 2026-05-22 | Slack reconciliation expanded into four-pattern model and made bidirectional. Step 2b check #9 rewritten: signals classified into Pattern A (direct corroboration), B (mechanism explanation), C (reframing context), D (testable gap), or rejected. Reaffirms that Slack is consulted **only** at this point — never during L0/L1/L2 — the fire-and-forget pattern is deliberate so Slack doesn't steer branch selection. Pattern A on declines gets a citation-elevation rule (bare `(corroborated ↗)` becomes named `(per Author · date ↗)` when the action is going to a DRI). Pattern B routes to Layer 1 narrative weaving + Section 3 Market Context block. Pattern C routes to a Layer 2 Important Context callout-item in Section 1 (high bar — four decision-changing tests); how to phrase the citation when the Slack timeframe differs from the report's pre/post is a styling concern handled in `report_structure.md → "Timeframe-citation rule"` (SKILL.md only points to it; the spec itself lives in the styling file). Added high-value gap categories list (operational events: assortment changes, pricing levers, content updates, product restructures, API migrations, vendor moves) — Pattern D recognises these as good retrospective query candidates. Added "one citation per concept" rule. Step 4 footer hardened: the two output lines are the only chat output — no narrative summary, no Slack recap, no highlights block. Session recordings rule extended explicitly to improvement loci (decline = look for failure; improvement = verify smooth flow + surface new UI elements). L2+ section gains direction-sensitive language and a pointer to `hypothesis.md → "Improvement direction — first-pass branches"` when CVR improved. Catalogue change called out as a first-class data-driven hypothesis (no Slack input required to trigger). |
 | c027 | 2026-05-21 | First-pass batch parallelised via sub-agents. "Run all branches within a level in parallel" replaced with a five-step spawning protocol: (1) write SQL for every cut before spawning, (2) open transcript section, (3) spawn one sub-agent per cut — each receives only SQL + output path + output contract (no reference files, context isolation enforced), (4) wait for all sub-agents before reading any result, (5) fill transcript and synthesise from the combined picture. Batch JSON files saved to `<run_dir>/batch_<cut_name>.json`. Failure handling: missing or empty JSON = DATA PULL FAILURE, log and continue, do not re-query inline. Applies to the first-pass branch set only; deeper levels (L2, L3) remain sequential. |
 | c030 | 2026-05-22 | Perf-audit companion-skill integration. When the cascade fixes on Paid (conversion path at L2/L3, or routing exit at L2/L3), spawn the perf-audit sub-agent at the end of the cascade and continue immediately — mirrors the Slack fire-and-forget pattern. Sub-agent runs the standalone perf-audit skill ([aaradhyaraiHO/perf-audit-skill](https://github.com/aaradhyaraiHO/perf-audit-skill)) with the CE name and pre/post date windows; returns a structured summary at `<run_dir>/perf_audit_summary.md` and the full report at `<run_dir>/perf_audit_report.md`. Summary shape: overall verdict, traffic-quality assessment (SIS/CPC/Paid CVR trends), campaign status (pauses, tROAS suppression, budget exhaustion), one-sentence key finding, optional surprise hypothesis. Funnel data deliberately excluded from the summary — perf-audit's attribution differs from Mixpanel's, and CVR-RCA owns the funnel numbers. Step 2b gains check #10 (Perf-audit reconciliation): same four-pattern routing as Slack — Pattern A corroborates a leaf, B names the campaign-level *why*, C reframes the root cause when traffic quality degraded alongside a page finding, D tests a surprise hypothesis with one query max. Path resolution: `$PERF_AUDIT_SKILL_PATH` env var → `~/.perf-audit-skill/SKILL.md` (companion install) → sibling directory → legacy `~/Documents/perf-audit-skill/`. If none resolve, log "Perf-audit skill not installed — skipped" and continue. hypothesis.md LP2S and Mix sections gain background-context pointers explaining that the perf-audit verdict folds in at Step 2b, never during dimension-cut phase. INSTALL.md Step 6 adds an optional companion install. Perf-audit is consulted *only* at Step 2b — the data-driven branches must reach their own leaves before the perf-audit verdict is read, so it corroborates or surprises a completed picture rather than steering branch selection. |
+| c035 | 2026-05-29 | **Step 3 Tab 2 rendering switches to HTML embed.** When perf-audit ran successfully, CVR-RCA's Tab 2 now reads `<run_dir>/perf_audit_report.html` (the polished HTML deliverable that perf-audit emits as a sibling of its markdown report), extracts the body content (everything between `<body>` and `</body>`, stripping any `<header>` inside), and pastes verbatim into `<div class="tab-pane" id="tab-perfaudit">`. Byte-paste, not comprehension — the HTML carries its own `perfaudit-<slug>` anchor IDs, headings, and chrome from the shared `visual_kit.md` both skills now reference. Fallback for older perf-audit versions (only emits markdown): legacy v1.16 inline md→HTML render. Companion changes in `report_structure.md` c031 (split into `visual_kit.md` + this file — primitives extracted), new `references/visual_kit.md` (shared design system), perf-audit-skill `perf_audit_structure.md` (new file defines perf-audit's section layout on top of visual_kit), perf-audit-skill SKILL.md (new Step 6 emits HTML alongside markdown). Visual quality goes up (embedded perf-audit content inherits CVR-RCA's visual_kit CSS, so it looks visually identical to surrounding Tab 1 content); Claude's reading load goes down (no markdown→HTML conversion at Step 3 — that work now happens once inside perf-audit, not on every CVR-RCA report write). Markdown artifacts (`perf_audit_summary.md`, `perf_audit_report.md`) unchanged — they remain Claude's input for Step 2b reconciliation reasoning. HTML is a presentation artifact, opaque to Claude at the embed step. |
 | c034 | 2026-05-28 | **Lazy-load references by phase.** "Before you begin" rewritten — Claude no longer reads all four references upfront. Per-phase reads: Step 1 reads SKILL.md only; Step 2 reads `context.md` + `hypothesis.md` (both, fully) at the start of investigation; Step 3 reads `actions.md` + `report_structure.md` (both, fully) at the start of report writing; Step 4 reads `evals/evaluator.md`. Files are loaded whole when loaded — section-level reads are explicitly rejected because they would constrain the cross-pattern reasoning that produces non-obvious findings. New "On reading references — a note on freedom" subsection codifies the principle: Claude has complete freedom to form hypotheses, design queries, and follow the data wherever it leads; references provide the shared context that makes the freedom precise rather than vague (data vocabulary in `context.md`, historical patterns as starting points in `hypothesis.md`, cause-to-action library at Step 3 in `actions.md`). The actions library is deliberately deferred to Step 3 so the Step 2b synthesis stays clean of action-template matching bias — Claude reaches its own root-cause conclusions before being shown what actions exist. Driven by the realisation that upfront loading of all four references (~85+ KB) at Step 1 splits attention across irrelevant patterns during early-phase reasoning, subtly biasing hypothesis selection. |
 | c033 | 2026-05-28 | **Step 3 reverted to Claude-writes-HTML.** Removed the `report_spec.json` + `scripts/render.py` prescription and the "Investigation drives the report" subsection (escape-hatch components). The report is now a single hand-authored HTML file following the patterns in `report_structure.md`. The v1.14 spec-JSON pipeline was constraining output quality — render.py's built-in component renderers (`metric_cards`, `mbho_channel_table`, `shapley_waterfall`, etc.) ship pre-v1.13 inline-styled HTML that doesn't match the v1.15 template's polished `.analysis-block` chrome, so reports rendered through the pipeline looked visually inconsistent. Claude-writes-HTML produces uniformly polished output (CE 252 was built this way and remains the quality target). The tab framework survives as a documented HTML pattern in `report_structure.md`, not as a render pipeline. Companion changes in `report_structure.md` c029 (tab + perf-audit inline patterns documented), `/cvr-rca` slash-command (Step 3 reverted to write-HTML-directly). Driven by CE 243 (Eiffel Tower) RCA, where the pipeline-rendered output visibly degraded vs CE 252's hand-authored quality. |
 | c032 | 2026-05-28 | New Step 3 subsection "Investigation drives the report, not the inverse" introduces the escape-hatch components (`analysis_block`, `raw_html`) with full schemas and a worked cross-cut example. Codifies the principle that the rendering layer serves the investigation: when an investigation surfaces a finding the 19 built-in components can't express, `analysis_block` wraps arbitrary HTML in the standard Section-3 chrome (visual consistency is free) and `raw_html` is pure passthrough for the rare case where the standard chrome is wrong. Includes a guard rail prohibiting cosmetic use — built-ins remain the default for standard cuts; escape hatches are for novel evidence only. Companion changes in `scripts/render.py` c033, `references/report_structure.md` c028. Driven by CE 252 (Louvre) RCA, where the 19-component cap could have silenced novel cross-cut findings. **Superseded by c033 — Step 3 reverted to Claude-writes-HTML; escape-hatch components no longer needed because there is no rendering pipeline to escape from.** |
