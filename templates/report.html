@@ -128,7 +128,12 @@
     /* ─── Tabbed report layout — see report_structure.md "Tabbed report structure" ── */
     /* Tabs only appear when render.py receives a spec with `tabs[]` length ≥ 2.
        For legacy single-tab specs the tab bar is omitted and content is flat,
-       so existing reports render byte-identically. */
+       so existing reports render byte-identically.
+
+       v1.15: .tab-bar is emitted OUTSIDE .container so the dark band stretches
+       full viewport width and buttons hug the left edge (40px padding aligns
+       with the header content edge). Survives any monitor width — no more
+       centered-island appearance on wide screens. */
     .tab-bar {
       display: flex;
       gap: 4px;
@@ -136,9 +141,9 @@
       top: 0;
       z-index: 50;
       background: #1a1a2e;
-      padding: 0 32px;
-      margin: 0 -24px 24px;
+      padding: 0 40px;
       border-bottom: 1px solid #2a2a44;
+      margin-bottom: 0;
     }
     .tab-button {
       font-family: inherit;
@@ -227,6 +232,8 @@
   </style>
 </head>
 <body>
+
+{{TAB_BAR}}
 
 <div class="container">
   {{BODY}}

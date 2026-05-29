@@ -4,6 +4,99 @@ This file tracks every meaningful change pushed to this repository. Each entry c
 
 ---
 
+## [Unreleased] — v1.16 — Retire spec-JSON + render.py pipeline; restore Claude-writes-HTML
+
+**Summary:** v1.14 added a `report_spec.json` + `scripts/render.py` rendering pipeline to support a multi-tab deliverable (CVR-RCA + Paid Performance Audit). v1.15 added escape-hatch components (`analysis_block`, `raw_html`) and left-aligned the tab bar. Both releases solved a real tab problem but introduced a quality regression: render.py's 19 built-in component renderers (`metric_cards`, `mbho_channel_table`, `shapley_waterfall`, `dimension_table`, `experience_table`, `trend_chart`, `action_cards`, etc.) ship inline-styled HTML from pre-v1.13 — older visual idioms that look utilitarian next to the polished `.analysis-block` chrome the v1.15 template defined. When a report mixes built-ins with escape-hatch blocks, two visual eras of the skill end up side-by-side in one document. CE 252 (Louvre, May 27) was hand-authored before v1.14 shipped and remains the quality target; CE 243 (Eiffel Tower, May 28) was rendered through the pipeline and showed the visual drift. v1.16 retires the pipeline for CVR-RCA content and restores the v1.13-era Claude-writes-HTML workflow. The tab framework survives as a documented HTML pattern (tab bar + `.tab-pane` wrappers as a copy-pasteable block in `report_structure.md`); perf-audit markdown is rendered to HTML inline as part of writing the report, with content verbatim. Freedom of movement is total — no component dispatcher to constrain novel findings, no spec JSON to maintain, no rendering pipeline to debug.
+
+### Changes by file
+
+**`SKILL.md`** — c033
+- Step 3 rewritten: "Write `report.html` directly, follow `report_structure.md` exactly." Removed the `report_spec.json` instruction, the `scripts/render.py` invocation, and the entire "Investigation drives the report, not the inverse" subsection (escape-hatch components no longer needed).
+- Tab framework — when to use it: rewritten as a binary decision (two-tab if perf-audit ran successfully, single-tab flat otherwise) with pointers into `report_structure.md` for the HTML patterns. No more spec-JSON shape.
+- c032 entry annotated as superseded by c033.
+
+**`references/report_structure.md`** — c029
+- "Tabbed report structure → Spec shape" section rewritten as a copy-pasteable HTML pattern: tab bar outside `.container`, two `.tab-pane` wrappers inside, tab-switching JS at end of body. No JSON.
+- New "Perf-audit tab rendering — markdown → HTML inline" subsection documents the verbatim conversion mapping Claude performs.
+- Single-tab / flat layout instruction clarified: omit the tab bar and `.tab-pane` wrappers entirely — do not emit vestigial tab markup.
+- Section 3 "What belongs in Section 3" table: the two escape-hatch component rows (`analysis_block`, `raw_html`) replaced with a single "Custom analysis block" row pointing to the `.analysis-block` HTML pattern.
+- Section opener text updated to reflect the Claude-writes-HTML model — "no rendering-pipeline constraint on what can ship; the guardrails are the HTML patterns in the Visual Spec section."
+
+**`~/.claude/commands/cvr-rca.md`** (slash-command file, outside this repo)
+- Step 3 reverted: "Write `report.html` directly. Follow `references/report_structure.md` exactly." Binary tab decision. No render.py invocation.
+
+**`scripts/render.py`**
+- No longer invoked by the workflow. File stays on disk as a reference implementation; can be cleaned up in a future release.
+
+**`templates/report.html`**
+- No longer invoked by the workflow. CSS and tab JS are now patterns in `report_structure.md → "Visual Spec — HTML patterns"` that Claude copies into the report directly.
+
+### What did not change
+
+- All other v1.15 improvements stay: pre-write sanity check, styling rule 6 (plain English for derived metrics), Slack-unavailable disclosure card, anti-pattern row on `days_to_first_available_date`, canonical-source rule for `inventory_availability`, demoted-proxy rule in `hypothesis.md`. None of these depended on the rendering pipeline.
+- Tab framework as a *concept* — still present. The CVR-RCA + Paid Performance Audit two-tab deliverable is unchanged. Only the *mechanism* changed: from spec-JSON-driven to HTML-pattern-driven.
+- Cross-tab anchor scheme (`perfaudit-<slug>`), citation routing table, four-pattern citation phrasings — all unchanged.
+- Investigation logic (cascade, L2+, sub-agents, four-pattern reconciliation, evaluator). Steps 1, 2, 2b, 4 are untouched.
+- Perf-audit skill — independent at `aaradhyaraiHO/perf-audit-skill`, ships `perf_audit_report.md` as before.
+
+### Why this design
+
+v1.14 was solving the right problem (single-deliverable C-level tabs) with the wrong tool (a render pipeline taking over all output). Component dispatchers are appropriate when you have many consumers each producing a different spec; the CVR-RCA has exactly one consumer (Claude) producing exactly one report per CE. Forcing that consumer through a 19-component schema, with an escape hatch for novel findings, added friction and constrained quality without adding any reproducibility the workflow actually needs. The simpler model — Claude reads `report_structure.md`, copies the CSS and HTML patterns, writes the report directly — matches the v1.13 era that produced CE 252's quality, and the tab feature drops in as a copy-pasteable HTML block rather than a JSON spec. The skill is simpler to maintain, the output is more polished, and the freedom-of-movement guarantee is preserved by construction (Claude writes HTML; there is nothing to escape).
+
+---
+
+## [v1.15-superseded] — 2026-05-28 — Left-aligned tabs + escape-hatch components + slash-command sync
+
+**Note:** v1.15 shipped briefly and was superseded by v1.16 the same day after a quality-regression review on the first production use (CE 243). The escape-hatch components (`analysis_block`, `raw_html`) and the spec-JSON pipeline they fixed have been retired in v1.16. The two non-pipeline improvements from v1.15 — left-aligned tab placement and the slash-command preamble correction — survive v1.16 (the tab placement as an HTML pattern; the slash-command correction is partially reverted to point at the Claude-writes-HTML workflow). The original v1.15 entry is preserved below for change-log fidelity.
+
+---
+
+## [v1.15-original] — 2026-05-27 — Left-aligned tabs + escape-hatch components + slash-command sync
+
+**Summary:** Three structural improvements driven by the CE 252 (Louvre) RCA session — one cosmetic, one architectural, one workflow. **(1) Tab placement** — the tab bar moves out of the centered `.container` and becomes a full-viewport-width sticky band with buttons left-anchored to the 40px header content edge. Survives any monitor width and matches standard tabbed-document conventions (Notion, Linear, Google Docs). Multi-tab reports gain visual consistency between the header and the tab bar; single-tab / flat-spec reports are byte-identical to v1.14. **(2) Escape-hatch components** — `analysis_block` and `raw_html` are added to render.py's dispatcher so Claude can ship novel investigation findings the 19 built-in components can't express. `analysis_block` wraps arbitrary HTML in the standard Section-3 chrome (visual consistency is free); `raw_html` is pure passthrough for the rare case where the standard chrome is wrong. SKILL.md Step 3 gains the principle "investigation drives the report, not the inverse" plus a guard rail against using the escape hatch for cosmetic deviation from existing components. Together these mean Claude has the same freedom of movement it had when writing HTML directly, with the determinism and aesthetic guardrails of the templated renderer. **(3) Slash-command preamble sync** — the `/cvr-rca` slash-command Step 3 instruction is updated from "write report.html directly (no render.py)" to "write report_spec.json, then run scripts/render.py". Resolves a latent v1.14 contradiction where the slash-command preamble said the opposite of what SKILL.md prescribed. A new "if this preamble ever contradicts SKILL.md, follow SKILL.md" guard rail catches future documentation drift.
+
+### Changes by file
+
+**`scripts/render.py`** — c032 + c033
+- `assemble()` now emits the tab bar into a separate `tab_bar_html` variable, threaded through a new `{{TAB_BAR}}` template substitution slot that lives outside `.container`. When `tabs[] < 2`, the slot resolves to an empty string — no regression for single-tab / flat-spec output.
+- New `render_analysis_block()` function — wraps arbitrary HTML in the standard `.analysis-block` chrome (rounded card, border, padding, title, optional verdict line, optional anchor id).
+- New `render_raw_html()` function — pure passthrough with optional Plotly figure registration.
+- Two new dispatcher branches (`analysis_block`, `raw_html`) before the unknown-component red-error fallback.
+- `SECTION_TITLES` table updated — both new components mapped to `(None, "")` so the outer section wrapper doesn't add an extra heading.
+- Module docstring extended with the two new schemas.
+
+**`templates/report.html`** — c032
+- New `{{TAB_BAR}}` placeholder between `<body>` and `<div class="container">`. The tab bar now stretches the full viewport with `padding: 0 40px` aligning the first button with the header's content edge.
+- `.tab-bar` CSS updated — dropped the `margin: 0 -24px 24px` negative-margin trick that was compensating for `.container`'s `padding: 0 24px`; bar now sits naturally at viewport width.
+- Comment block above `.tab-bar` explains the v1.15 rationale so future maintainers don't accidentally move it back inside `.container`.
+
+**`references/report_structure.md`** — c027 + c028
+- New "Tab bar placement — full-width, left-anchored" subsection under "Tabbed report structure → Visual differences from CVR-RCA content" explaining the placement, the rationale, and the byte-identical guarantee for single-tab specs.
+- Two new rows in "What belongs in Section 3" table — `analysis_block` (the escape hatch for novel findings, with visual consistency) and `raw_html` (true passthrough, rare).
+- Section opener gains one sentence pointing readers to the escape hatches when no built-in component matches the finding.
+
+**`SKILL.md`** — c032
+- New "Investigation drives the report, not the inverse" subsection at the end of Step 3 with both escape-hatch schemas (analysis_block, raw_html), a worked example for a cross-cut finding, and a guard rail prohibiting cosmetic use of the escape hatches.
+
+**`~/.claude/commands/cvr-rca.md`** (slash-command file, outside this repo)
+- Step 3 instruction updated from "Write report.html directly (no render.py — Claude writes HTML)" to "Write report_spec.json per SKILL.md Step 3, then run scripts/render.py". Pointer to analysis_block / raw_html for novel findings.
+- New guard line: "If this slash-command preamble ever contradicts SKILL.md, follow SKILL.md — it is the source of truth for the workflow; this Quick Reference is a convenience wrapper."
+
+### What did not change
+
+- The 19 built-in component renderers — no signatures changed, no behavior changes.
+- Single-tab / flat-spec rendering — byte-identical to v1.14.
+- Cross-tab anchor scheme, citation routing table, four-pattern citation phrasings.
+- Tab-switching JS in `templates/report.html` (click handlers, hash-on-load, Plotly resize on tab-show) — all preserved, all still work.
+- Perf-audit tab markdown rendering — the `.md-content` styling, anchor-prefix injection, and slugification rules are unchanged.
+- The unknown-component red-error fallback — still fires for typos in `component` names; never fires for legitimate novel findings (use `analysis_block` instead).
+
+### Why this design
+
+The cosmetic fix (left-aligned tabs) and the architectural fix (escape hatches) ship together because they share a principle: **the rendering layer serves the investigation, not the other way around.** Centered tabs were a rendering-driven design choice that read as visually disconnected on wide monitors; the 19-component cap was a rendering-driven constraint that could silence novel findings; the slash-command preamble drift was a documentation-driven contradiction that forced Claude to choose between two conflicting instructions. All three inverted the relationship between the renderer and the investigation. The v1.15 design restores the right order: investigations surface findings, the report shape accommodates them, with visual guardrails kept intact and a single source of truth for the workflow.
+
+---
+
 ## [v1.14] — 2026-05-23 — Tabbed report framework (single deliverable for C-level audits)
 
 **Summary:** The CVR-RCA report becomes a multi-tab HTML deliverable. The first tab is the existing CVR-RCA report (unchanged). When the perf-audit sub-agent ran (cascade fixed on Paid), a second tab — **Paid Performance Audit** — is rendered inline from `perf_audit_report.md` so stakeholders can read the full perf-audit without opening a separate file. Cross-tab citations work natively: every `(per perf-audit ↗)` style reference inside the CVR-RCA tab deep-links into the right perf-audit section, switching tabs and scrolling automatically. The framework is **scalable** by design — adding a future third tab (experiment-RCA, supply-RCA, anything else with markdown output) is a one-line config entry, not a rewrite. Backward compatibility is absolute: any run where the perf-audit didn't fire (Organic segment, not installed, DATA GAP) produces the existing flat report — byte-identical to v1.13 output. The perf-audit skill itself is **not modified** — CVR-RCA renders its markdown at report-build time, so the two skills retain independent release cadences (perf-audit ships at [aaradhyaraiHO/perf-audit-skill](https://github.com/aaradhyaraiHO/perf-audit-skill)).

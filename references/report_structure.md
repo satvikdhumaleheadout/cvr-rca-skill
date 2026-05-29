@@ -158,32 +158,60 @@ The report can hold multiple analyses in one file via a tab framework. Today the
 
 Backward compatibility is absolute — a legacy single-section spec renders byte-identically to v1.13 output.
 
-### Spec shape
+### HTML pattern — tab bar + tab panes
 
-```json
-{
-  "tabs": [
-    {
-      "id": "cvr-rca",
-      "label": "CVR RCA",
-      "sections": [ {"component": "metric_cards"}, ... ]
-    },
-    {
-      "id": "perfaudit",
-      "label": "Paid Performance Audit",
-      "source": {"type": "markdown", "path": "perf_audit_report.md"},
-      "anchor_prefix": "perfaudit-"
-    }
-  ]
-}
+Claude writes the tab structure inline in the report. Copy this pattern verbatim — tab bar outside `.container`, then both panes inside:
+
+```html
+<body>
+
+<!-- Tab bar — outside .container so it stretches full-viewport-width
+     and the first button hugs the 40px left edge -->
+<div class="tab-bar" role="tablist">
+  <button class="tab-button active" data-tab="cvr-rca" role="tab" aria-selected="true">CVR RCA</button>
+  <button class="tab-button" data-tab="perfaudit" role="tab" aria-selected="false">Paid Performance Audit</button>
+</div>
+
+<div class="container">
+
+  <!-- Tab 1 — CVR RCA (the standard Sections 1, 2, 3 below) -->
+  <div class="tab-pane active" id="tab-cvr-rca" role="tabpanel">
+    <!-- header, metric_cards, callout, action cards, all Section 3 blocks here -->
+  </div>
+
+  <!-- Tab 2 — Paid Performance Audit (only when perf-audit ran successfully) -->
+  <div class="tab-pane" id="tab-perfaudit" role="tabpanel">
+    <div class="md-content">
+      <!-- perf_audit_report.md rendered inline — see "Perf-audit tab rendering" below -->
+    </div>
+  </div>
+
+</div><!-- /.container -->
+
+<!-- Tab-switching JS at the very end of <body> — see "Tab JS" pattern below -->
+</body>
 ```
 
-Per-tab keys:
-- `id` — required. Used in the DOM (`tab-<id>`) and the button (`data-tab="<id>"`).
-- `label` — required. The visible tab name. Keep it short — 3 words max.
-- `sections` — optional. An array of component dicts, same shape as legacy top-level `sections`. Mutually exclusive with `source`.
-- `source` — optional. `{"type": "markdown", "path": "<run-dir-relative>"}`. `render.py` reads and parses the markdown at build time, injects anchor IDs on every heading, and emits the body inside `<div class="md-content">`. Mutually exclusive with `sections`.
-- `anchor_prefix` — optional. Defaults to `"<id>-"` (e.g., `perfaudit-`). Prepended to every slugified heading ID so cross-tab links stay namespaced.
+For **single-tab / flat** reports (perf-audit didn't fire, returned DATA GAP, or cascade fixed on Organic), **omit the `.tab-bar` and both `.tab-pane` wrappers entirely**. The body becomes a plain `<div class="container">` with the report content inside. No vestigial tab markup, no inert tab bar with one button.
+
+### Perf-audit tab rendering — markdown → HTML inline
+
+When the perf-audit tab is emitted, Claude reads `<run_dir>/perf_audit_report.md` and writes its HTML representation directly into the second tab pane, preserving content verbatim. Only markdown *syntax* is converted to HTML tags — every claim, number, table cell, list item, and section heading is identical to the source file. No claims are paraphrased; no numbers re-rounded; no sections reordered.
+
+Conversion mapping:
+- `# Heading` → `<h1 id="perfaudit-<slug>">Heading</h1>`
+- `## N. Heading` → `<h2 id="perfaudit-<slug>">N. Heading</h2>` (slug strips the leading "N. ")
+- `### Heading` → `<h3 id="perfaudit-<slug>">Heading</h3>`
+- `**bold**` → `<strong>bold</strong>`
+- `*italic*` → `<em>italic</em>`
+- `` `code` `` → `<code>code</code>`
+- `- bullet` → `<ul><li>bullet</li></ul>`
+- `1. numbered` → `<ol><li>numbered</li></ol>`
+- `| pipe | tables |` → `<table class="md-table"><thead>...</thead><tbody>...</tbody></table>`
+- `---` → `<hr>`
+- Paragraph breaks → `<p>...</p>`
+
+The `<div class="md-content">` wrapper carries the styling that makes the markdown structure feel native to the report (h2/h3 hierarchy, list spacing, code blocks, link colors). See "Shared `<style>` block" in the Visual Spec section for the `.md-content` and `.md-table` CSS that supports this.
 
 ### Cross-tab anchor scheme
 
@@ -228,14 +256,18 @@ Citation placement follows the same rules as Slack:
 
 The perf-audit tab uses `.md-content` styling, which inherits the dark-theme look but keeps the markdown structure (h2/h3 hierarchy, GFM tables with `.md-table` class, lists, bold/italic). It deliberately does **not** mimic Section 3's `.analysis-block` cards — the perf-audit report has its own logic and section structure; restyling it would obscure that. The visual cue is intentional: the reader knows they're looking at a different artifact.
 
+### Tab bar placement — full-width, left-anchored
+
+The tab bar renders full-viewport-width and sticky at the top of the viewport, with the first button left-anchored to the 40px content edge (matching the header's content padding). This is **outside** the centered `.container` (max-width 1050px) — the bar stretches the full window so a reader on any monitor size sees the tabs at the page's left edge rather than as a centered island within the content column. The HTML pattern above places the `<div class="tab-bar">` between `<body>` and `<div class="container">` exactly so this layout falls out naturally.
+
 ### When the perf-audit tab is conditional / omitted
 
-The CVR-RCA tab is unconditional. The perf-audit tab is emitted only when:
+The CVR-RCA tab is unconditional (always emit). The perf-audit tab is emitted only when:
 1. The cascade fixed on Paid (Trigger 1 or Trigger 2 from `SKILL.md → "Perf-audit context — fire and forget"`), AND
 2. `perf_audit_report.md` exists in the run directory and has non-empty content, AND
 3. The sub-agent verdict was not `DATA GAP: no campaigns` (in which case there is no useful content to show; the verdict still surfaces via the findings.md evidence entry and any Pattern B/C citations)
 
-When any of those fail, the spec is single-tab (or flat) and the tab bar is omitted. Citations into the perf-audit tab don't appear because the corresponding evidence inventory entry doesn't exist.
+When any of those fail, write the report as a single-tab flat layout — no `.tab-bar`, no `.tab-pane` wrappers, no tab-switching JS. The report body is just `<div class="container">` with the Sections directly inside.
 
 ---
 
@@ -369,6 +401,8 @@ Include only analyses that directly support or rule out a claim made in Sections
 
 Conditional blocks (inventory, session recordings, price analysis, weekday composition) slot between items 5 and 6 within the relevant funnel step's evidence. The Market Context block sits *after* secondary driver evidence (item 6.5) so the data-driven story leads — external/Slack context is supporting evidence, not the primary lens.
 
+The list below covers most CEs. **When the investigation surfaces a finding that doesn't match any of the standard blocks, add a custom `.analysis-block` for it** — Claude writes the report in HTML directly, so there is no rendering-pipeline constraint on what can ship. The visual guardrails come from following the `.analysis-block` HTML pattern in the Visual Spec section (rounded card, title, optional verdict line, body content); the content inside the block is freeform.
+
 | Analysis | When to include |
 |---|---|
 | Shapley decomposition | Always — establishes which funnel step drove ΔCVR and by how much. Use the proportional flex bar (see visual spec), not a Plotly waterfall. |
@@ -386,6 +420,7 @@ Conditional blocks (inventory, session recordings, price analysis, weekday compo
 | Session recordings | When recordings were pulled — present as a structured table (see below). |
 | Weekday composition | When pre vs post differs materially in weekday/weekend mix AND the report attributes any portion of the move to that imbalance. Render only when material — otherwise the check stays in the transcript. Two-row table: pre weekdays/weekends, post weekdays/weekends; subtext explains the implied calibration on the headline metric. |
 | Market context & operational signals | When Slack returned at least one pattern B (mechanism explanation) or C (reframing context) signal. Three-column table: Signal · What it tells us about this report · Source. See HTML pattern below. |
+| Custom analysis block | When the investigation surfaced a finding that doesn't match any of the standard rows above but should still look visually consistent with the rest of Section 3. Write a `<div class="analysis-block">` with a `<div class="block-title">`, optional `<div class="verdict-line">`, and freeform body HTML inside. **Default home for novel findings.** |
 
 ### URL-level breakdown block
 
@@ -1792,5 +1827,8 @@ Plotly.newPlot('trend-90day', traces90d, {
 | c022 | 2026-05-14 | Section 2 action card spec — added evidence threshold rule: before creating a standalone action card, verify both the rate drop and raw event count. Directional signals from small samples belong as a sub-bullet inside the most relevant existing card, not as a standalone card. Example sub-bullet wording provided. |
 | c023 | 2026-05-14 | Section 3 "What belongs in Section 3" — added fixed ordering for always-present blocks (numbered 1–8: mix cascade + Fixed Segment banner → Geo/Non-Geo → Shapley → daily trend → primary driver cuts → secondary driver evidence → ruled-out dimensions → hypotheses explored). Conditional blocks (inventory, session recordings, price) slot within primary driver evidence. Replaces the previous unordered table header which gave no sequencing signal. |
 | c024 | 2026-05-08 | Added "URL-level breakdown block" HTML pattern section, placed before the inventory section format. Fills the gap where the "What belongs in Section 3" table listed "URL-level breakdown" with no format spec. Two verdict forms: performance verdict (rate dropped, share held) and routing verdict (share shifted, rates held). Table columns: URL · Period · Users · % of LP · LP2S · S2C · C2O · CVR. `.highlight-row` on URLs where rate dropped meaningfully or `pct_of_lp` shifted substantially. Pointer to the dedicated URL breakdown query in `context.md` (not the canonical L2+ query — that query does not produce `pct_of_lp`). |
+| c029 | 2026-05-28 | **Tab framework documented as an HTML pattern, not a render-pipeline spec.** "Tabbed report structure → Spec shape" section rewritten as a copy-pasteable HTML pattern (tab bar outside `.container`, two `.tab-pane` wrappers inside). New "Perf-audit tab rendering — markdown → HTML inline" subsection documents the verbatim markdown-to-HTML conversion Claude performs when writing the report. Single-tab / flat-layout instruction clarified: omit the `.tab-bar` and `.tab-pane` wrappers entirely, do not emit vestigial tab markup. Section 3 "What belongs" table rewritten — the two escape-hatch component rows (`analysis_block`, `raw_html`) replaced with a single "Custom analysis block" row that points to the `.analysis-block` HTML pattern. Section opener text updated to reflect the Claude-writes-HTML model. Companion changes in `SKILL.md` c033 (Step 3 reverted) and the `/cvr-rca` slash-command (Step 3 reverted). Driven by CE 243 RCA where the render.py output visibly degraded vs CE 252's hand-authored quality. |
+| c028 | 2026-05-28 | Two new rows in "What belongs in Section 3" table for the v1.15 escape-hatch components — `analysis_block` (wraps arbitrary HTML in the standard Section-3 chrome; the default escape hatch for novel findings, preserves visual consistency) and `raw_html` (true passthrough, no wrapper; for the rare full-bleed callout / custom Plotly container). Section opener gains one sentence pointing readers to the escape hatches when no built-in matches the finding. Codifies the freedom-of-movement guarantee: Claude has the same flexibility it had when writing HTML directly, with the determinism of the templated renderer. Companion changes in `SKILL.md` c032, `scripts/render.py` c033. Driven by CE 252 (Louvre) RCA. |
+| c027 | 2026-05-28 | New "Tab bar placement — full-width, left-anchored" subsection under "Tabbed report structure → Visual differences from CVR-RCA content" documenting the v1.15 move of `.tab-bar` outside `.container`. Tab bar renders full-viewport-width and sticky at the top, with the first button left-anchored to the 40px header content edge — survives any monitor width, no more centered-island appearance on wide screens. Companion changes in `templates/report.html` c032 (.tab-bar CSS updated; new `{{TAB_BAR}}` placeholder) and `scripts/render.py` c032 (assemble() emits tab bar into the new template slot). Single-tab / flat-spec reports byte-identical to v1.14. Driven by CE 252 (Louvre) RCA. |
 | c026 | 2026-05-27 | Four direction-agnostic changes driven by CE 252 (Louvre) RCA learnings. **(1) Pre-write sanity check** at top of file — two universal items every report must verify before writing: header carries the four meta spans (📅 pre, 📅 post, 🌍 market, 🔗 landing-page URL); ↗ arrows present in Section 1 callout and Section 2 action card cause-lines. Universal regardless of CVR direction or CE. **(2) Styling rule 6 — plain English for derived metrics** (e.g., `structural_delta_cvr`). When citing a derived metric in a callout, unpack it once in GM-readable language (what LY did, what we did, what the gap means) rather than analyst shorthand. Direction-agnostic — applies whether structural delta is positive or negative. **(3) "When Slack context is unavailable"** subsection in Slack integration — small disclosure card pattern rendered inside the Market Context block when slack_context.md was not available at write-time (timeout, late return after Step 3, permission denial). Replaces the silent-skip failure mode. Direction-agnostic. **(4) Anti-pattern row** added: `days_to_first_available_date` as primary supply evidence. It is a single-integer proxy from `product_rankings_features`; canonical supply evidence is `inventory_availability` ticket counts per lead-time bucket. Applies to both supply expansion (improvement) and supply depletion (decline) findings. Companion changes in `context.md` c016 (canonical-source rule on the table) and `hypothesis.md` c019 (proxy demoted in S2C decline + S2C improvement + Pattern 4). |
 | c025 | 2026-05-22 | Major styling expansion driven by CE 1223 (Pompeii) RCA learnings — bidirectional support and Slack integration. **Slack integration:** new "Slack integration & link-to-table styling" section consolidates three-layer model (narrative weaving / Important Context callout-item / Market Context Section 3 block), four-pattern classification (A/B/C/D), timeframe-citation rule, one-citation-per-concept rule, Slack-corroboration-upgrades-evidence rule for declines. Section 3 ordering gains item 6.5 (Market context & operational signals, conditional). New HTML pattern for Market Context block (3-column table, generic title — never bake channel name into heading). **Link-to-table:** every Section 3 `.analysis-block` carries an `id` attribute; canonical anchor ID convention listed. New ↗ ref-link CSS (`.ref-link`, `html { scroll-behavior: smooth }`, `.analysis-block:target` highlight). Usage rules: ↗ in Section 1 callout, Section 2 action cards, Hypotheses Explored "Test run" column; never inside Section 3 verdict lines or subtexts. Citation format split: bare `↗` for internal navigation; `Source · date ↗` for Slack citations. **Bidirectional support:** Section 1c CVR-improved variant gains magnitude threshold for "What's holding it back" (<~10% of total ΔCVR → fold into sub-bullet); Section 2 gains improvement-direction action card sub-spec (Protect / Extend / Investigate-headwind templates). **Styling rule 5 (new):** preserve Headout-native jargon (WBR, SP, GBV, RR vs plan, TGID, TID, VID, CR%, FabriGPT, etc.) — paraphrasing reduces trust. Does not override rule 1 — investigation-internal labels (Path A/B, Case A/B/C) still translated. **Shapley sign-aware rule:** flex bar handles mixed-sign contributions cleanly — absolute-value flex + sign prefix for mild offsets (<20%), or net-positive flex only for large offsets (>25%). **D3 — Weekday composition Section 3 block** added to "What belongs in Section 3" table — renders only when material and the report attributes any portion of the move to weekday imbalance. |

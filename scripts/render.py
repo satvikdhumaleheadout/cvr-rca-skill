@@ -29,6 +29,14 @@ Component types:
   callout              — variant: "insight"|"warning"|"finding"|"mix_note", text: "..."
                          optional: heading: "..." (bold hero line), label: "..." (small-caps context tag)
   action_cards         — actions: [{finding, cause, action, dri}, ...]
+
+Escape-hatch components (v1.15) — for novel investigation findings the
+built-ins can't express. Use sparingly; standard components remain the default.
+  analysis_block       — title, verdict?, verdict_class?, body_html, anchor_id?
+                         wraps arbitrary HTML in the standard Section-3 chrome
+  raw_html             — html, chart_id?, fig_json?
+                         pure passthrough, no wrapper; for full-bleed callouts
+                         or custom Plotly containers that need their own layout
 """
 
 from __future__ import annotations
@@ -1134,6 +1142,89 @@ def section(title: str, content: str, subtitle: str = "") -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Escape-hatch components (v1.15)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# The 19 built-in component renderers above cover the common RCA shapes. When
+# an investigation surfaces a finding the built-ins can't express — a custom
+# cross-cut Claude designed mid-investigation, a novel chart for a metric not
+# in summary.json, a structured table for an experience pivot that doesn't
+# match `experience_table`'s shape — the spec-JSON path needs an escape hatch
+# so the rendering layer never silences a real finding.
+#
+# Two components serve this need:
+#   • analysis_block — wraps arbitrary HTML in the standard Section-3 chrome
+#     (rounded card, border, title styling, verdict-line styling). Preferred
+#     for novel findings that should look visually consistent with the rest
+#     of Section 3.
+#   • raw_html — pure passthrough, no wrapper. Use only when the standard
+#     chrome is wrong for the finding (full-bleed callout, custom Plotly
+#     container, section divider). Rare.
+#
+# Principle (also documented in SKILL.md Step 3): investigation drives the
+# report, not the inverse. The escape hatches are for *novel evidence*, not
+# for cosmetic deviation from existing components.
+
+def render_analysis_block(item: dict) -> tuple[str, list]:
+    """Wrap arbitrary HTML in the standard Section-3 .analysis-block chrome.
+
+    Schema:
+      title:          required — section heading shown at the top of the block
+      verdict:        optional — colored inline finding line above body
+      verdict_class:  optional — "" (red, default) | "neutral" (blue-grey)
+      body_html:      required — arbitrary HTML; rendered verbatim inside the block
+      anchor_id:      optional — DOM id for ↗ link-to-table anchors (e.g. "block-custom-X")
+    """
+    title       = item.get("title", "")
+    verdict     = item.get("verdict", "")
+    vclass      = item.get("verdict_class", "")
+    body_html   = item.get("body_html", "")
+    anchor_id   = item.get("anchor_id", "")
+
+    anchor_attr = f' id="{anchor_id}"' if anchor_id else ""
+    vclass_suffix = f" {vclass}" if vclass else ""
+    verdict_html = (
+        f'<div class="verdict-line{vclass_suffix}">{verdict}</div>' if verdict else ""
+    )
+    title_html = (
+        f'<div class="block-title">{title}</div>' if title else ""
+    )
+    html = (
+        f'<div class="analysis-block"{anchor_attr}>'
+        f'{title_html}'
+        f'{verdict_html}'
+        f'{body_html}'
+        f'</div>'
+    )
+    return html, []
+
+
+def render_raw_html(item: dict) -> tuple[str, list]:
+    """Pass HTML through verbatim. No wrapper, no chrome.
+
+    Schema:
+      html:      required — arbitrary HTML rendered verbatim
+      chart_id:  optional — Plotly chart container id (if the HTML contains one)
+      fig_json:  optional — JSON-serialised Plotly figure spec for the chart
+
+    When both chart_id and fig_json are supplied, the figure is registered with
+    the page-level Plotly init script (same path as built-in chart components).
+    """
+    html = item.get("html", "")
+    charts = []
+    chart_id = item.get("chart_id")
+    fig_json = item.get("fig_json")
+    if chart_id and fig_json:
+        try:
+            fig = json.loads(fig_json) if isinstance(fig_json, str) else fig_json
+            charts.append((chart_id, fig))
+        except (json.JSONDecodeError, TypeError):
+            # Fail soft — render the HTML anyway, just skip the figure registration
+            pass
+    return html, charts
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Dispatch table
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1197,6 +1288,12 @@ def dispatch(spec_item: dict, summary: dict) -> tuple[str, list]:
         return render_price_trend_chart(summary)
     elif t == "url_table":
         return render_url_table(summary)
+    elif t == "analysis_block":
+        # v1.15 escape hatch — see "Escape-hatch components" section above
+        return render_analysis_block(item)
+    elif t == "raw_html":
+        # v1.15 escape hatch — true passthrough, no wrapper
+        return render_raw_html(item)
     else:
         return f'<p style="color:red;">Unknown component: {t}</p>', []
 
@@ -1225,6 +1322,11 @@ SECTION_TITLES = {
     "callout":                     (None, ""),    # no section wrapper
     "action_cards":                ("Findings & Actions", ""),
     "session_recordings_table":    ("Session Recordings", "Directly observed user behaviour · post period"),
+    # v1.15 escape hatches — these render their own chrome (analysis_block) or
+    # no chrome (raw_html), so the outer _render_sections wrapper must NOT add
+    # a section heading. None signals "renders directly, no wrapper."
+    "analysis_block":              (None, ""),
+    "raw_html":                    (None, ""),
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1528,9 +1630,14 @@ def assemble(spec: dict, summary: dict, template: str, spec_dir: Path | None = N
     # When the tab list has 2+ entries we emit a tab bar above panes; with one
     # entry (or no tabs key) we emit content flat — zero regression for older
     # specs and for runs where the perf-audit didn't fire.
+    # v1.15: tab bar is emitted into its own template slot ({{TAB_BAR}}) so it
+    # sits outside .container — full-viewport-width sticky band, left-anchored
+    # buttons. See report_structure.md → "Tabbed report structure → Visual
+    # differences from CVR-RCA content" for the rationale.
+    tab_bar_html = ""
     tabs = spec.get("tabs")
     if tabs and len(tabs) >= 2:
-        sections_html += render_tab_bar(tabs)
+        tab_bar_html = render_tab_bar(tabs)
         for idx, tab in enumerate(tabs):
             active_cls = " active" if idx == 0 else ""
             tab_id = tab["id"]
@@ -1586,6 +1693,7 @@ def assemble(spec: dict, summary: dict, template: str, spec_dir: Path | None = N
 
     html_out = (template
                 .replace("{{TITLE}}", title_str)
+                .replace("{{TAB_BAR}}", tab_bar_html)
                 .replace("{{BODY}}", sections_html)
                 .replace("{{CHART_SCRIPTS}}", chart_js)
                 .replace("{{HEADOUT_LOGO_SRC}}", logo_src))
