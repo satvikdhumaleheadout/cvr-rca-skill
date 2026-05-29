@@ -4,6 +4,31 @@ This file tracks every meaningful change pushed to this repository. Each entry c
 
 ---
 
+## [Unreleased] — v1.18 — Bulleted shape for Section 1 callout
+
+**Summary:** Section 1 callout answers gain a second shape — lead claim + bullet list — for multi-mechanism findings. The existing paragraph form remains the default for single-mechanism findings; Claude picks the shape that matches the finding. No threshold rule, no word cap. New styling rule 7 makes the preference explicit ("prefer the bullet shape when a callout enumerates drivers"). The bullet form is documented in the Visual Spec with its own CSS and HTML pattern so it inherits the existing callout typography (15px dark text) and ↗ ref-link placement convention.
+
+### Changes by file
+
+**`references/report_structure.md`** — c030
+- New styling rule 7 added to the existing rules 1–6 list: prefer bullet shape when enumerating drivers.
+- Section 1c spec rewritten to document both shapes (paragraph + lead claim with bullet list); removes the prescriptive "1–3 sentences" upper bound on `.a` answers since multi-driver answers naturally extend beyond that.
+- Visual Spec gains CSS for `.callout-item .a ul`, `li`, `li strong` — tight bullet spacing that inherits the existing callout typography.
+- Visual Spec gains a "Shape B — multi-driver" HTML pattern alongside the existing single-mechanism pattern. The two shapes can mix within the same callout — each `.callout-item` chooses independently.
+
+### What did not change
+
+- The three-question structure (What broke / Why / When for declines; What drove improvement / What's holding back / When for improvements) — unchanged.
+- The colored left border (`#e53935` red for decline, `#2e7d32` green for improvement) and the heading — unchanged.
+- The ↗ ref-link convention — same placement rules, just one arrow per bullet instead of stacked inside a paragraph.
+- Single-mechanism reports — render identically; the paragraph shape stays the default for them.
+
+### Why this design
+
+The most-scanned section of the report was becoming the hardest to scan when findings were multi-mechanism. The spec only described the paragraph form, so the natural fallback for a 5-driver answer was "paragraph with inline `(1)/(2)/(3)` markers and embedded bold tags" — visually dense, hard to skim. Documenting the bullet shape as the second-class option with its own HTML pattern lets Claude pick the shape that fits the finding instead of force-fitting everything into prose. The change is purely additive — single-mechanism callouts continue to render in paragraph form, so no existing report regresses.
+
+---
+
 ## [Unreleased] — v1.17 — Lazy-load references by phase
 
 **Summary:** Claude no longer reads all four reference files upfront. Reading is deferred to the phase that needs the file: `context.md` + `hypothesis.md` at Step 2 (investigation), `actions.md` + `report_structure.md` at Step 3 (writing the report), `evals/evaluator.md` at Step 4. Step 1 reads only `SKILL.md`. Files are loaded **whole** when loaded — section-level reads are explicitly rejected because they would constrain the cross-pattern reasoning surface that produces non-obvious findings (cross-cuts, catalogue-change recognition, the connections between query templates and historical patterns). The change is about *when* to load, not *what* to load. A new "On reading references — a note on freedom" subsection in SKILL.md codifies the operating principle: Claude has complete freedom to form hypotheses, design queries, and follow the data wherever it leads; references are the shared context that makes that freedom precise rather than vague. `actions.md` is deliberately deferred to Step 3 so the Step 2b synthesis reaches the root cause without being biased toward existing action templates — novel root causes can produce novel actions, not just remixes of the library.

@@ -49,6 +49,9 @@ Numbers like `structural_delta_cvr` (current Δ minus LY Δ) collapse two compar
 - ✅ "Last year over the same window CVR fell 1.07pp; we rose 0.62pp despite that seasonal pressure, so the underlying gain vs the seasonal baseline is +1.69pp."
 - ❌ "Structural ΔCVR is +1.69pp after stripping seasonality (LY −1.07pp)."
 
+**7. Prefer the bullet shape when a callout enumerates drivers.**
+When a Section 1 callout answer names multiple drivers, headwinds, or mechanisms, use the lead claim + bullet list shape rather than packing them into a paragraph with inline `(1)/(2)/(3)` markers. The bullet shape is the documented alternative — see "Visual Spec → Callout — multi-driver shape." Pick the shape that matches the finding: a single-mechanism callout stays in paragraph form; an enumerated callout uses bullets so the reader can scan the named drivers without parsing prose.
+
 ---
 
 ## Slack integration & link-to-table styling
@@ -295,7 +298,13 @@ See the 90-day chart spec in the Plotly section below.
 
 ### 1c. Root cause callout (always)
 
-One callout box — the most important element in the entire report. It answers three questions, each as a `.callout-item` with a `.q` label (uppercase grey, 11px) and an `.a` answer (15px, dark, 1–3 sentences).
+One callout box — the most important element in the entire report. It answers three questions, each as a `.callout-item` with a `.q` label (uppercase grey, 11px) and an `.a` answer (15px, dark).
+
+**Two answer shapes are available:**
+- **Paragraph shape** — a short prose answer, used when the finding is a single mechanism.
+- **Lead claim + bullet list shape** — used when the answer enumerates multiple drivers, headwinds, or mechanisms. The lead claim names the headline framing in 1–2 sentences; each bullet names a driver in `<strong>`, an em-dash, and a one-line piece of evidence with its `↗` ref-link at the end of the bullet.
+
+Both shapes are documented in "Visual Spec → Callout HTML patterns". Pick the shape that matches the finding — there is no threshold rule, just judgment about which is more readable for the specific RCA. Styling guidelines rule 7 covers when to prefer bullets.
 
 **When CVR declined:** Red left border (`#e53935`), heading "Root Cause". Three questions:
 
@@ -942,6 +951,11 @@ Do not show separate tables for dimensions that produced no signal. The ruled-ou
     margin-bottom: 4px;
   }
   .callout-item .a { font-size: 15px; color: #1a1a2e; font-weight: 500; }
+  /* Multi-driver shape — lead claim + bullet list inside .callout-item .a
+     (see "Visual Spec → Callout HTML patterns → Multi-driver shape") */
+  .callout-item .a ul { margin: 8px 0 0 0; padding-left: 18px; }
+  .callout-item .a li { margin-bottom: 4px; line-height: 1.5; font-weight: 500; }
+  .callout-item .a li strong { color: #1a1a2e; font-weight: 700; }
 
   .action-card {
     background: #fff;
@@ -1137,6 +1151,10 @@ Naming convention: `block-<kebab-name>` for tables and text blocks, `chart-<keba
 
 ### Root cause callout (Section 1b)
 
+Two answer shapes are available inside each `.callout-item .a`. Pick the one that matches the finding — paragraph for a single mechanism, bullet list when the answer enumerates several drivers, headwinds, or mechanisms. See styling rule 7 above.
+
+**Shape A — paragraph (single mechanism):**
+
 ```html
 <div class="callout">
   <h2>Root Cause</h2>
@@ -1154,6 +1172,47 @@ Naming convention: `block-<kebab-name>` for tables and text blocks, `chart-<keba
   </div>
 </div>
 ```
+
+**Shape B — multi-driver (lead claim + bullet list):**
+
+Use when the answer names multiple drivers or headwinds. The lead claim is a short prose sentence (or two) that names the headline direction, magnitude, and framing. Each bullet starts with the named driver in `<strong>`, an em-dash, a one-line piece of evidence, and the `↗` ref-link at the end of the bullet (one arrow per bullet — no stacked arrows in a single sentence).
+
+```html
+<div class="callout">
+  <h2>CVR Improved — What's Driving It &amp; What's Holding It Back</h2>
+
+  <!-- Multi-driver answer: lead claim + bullet list -->
+  <div class="callout-item">
+    <div class="q">What drove the improvement?</div>
+    <div class="a">
+      [Lead claim — names the headline direction, magnitude, and framing
+      (e.g., "structural and multi-causal", "concentrated on a single TGID").]
+      <ul>
+        <li><strong>[Driver name]</strong> — [one-line evidence]
+            <a class="ref-link" href="#block-id">↗</a></li>
+        <li><strong>[Driver name]</strong> — [one-line evidence]
+            <a class="ref-link" href="#block-id">↗</a></li>
+        <li><strong>[Driver name]</strong> — [one-line evidence]
+            <a class="ref-link" href="#block-id">↗</a></li>
+        <!-- repeat per driver -->
+      </ul>
+    </div>
+  </div>
+
+  <!-- Other callout items may use Shape A or Shape B depending on what fits -->
+  <div class="callout-item">
+    <div class="q">What's holding it back?</div>
+    <div class="a">[paragraph or bullet list — same choice rule]</div>
+  </div>
+
+  <div class="callout-item">
+    <div class="q">When did improvement begin?</div>
+    <div class="a">[exact date or window, sudden or gradual]</div>
+  </div>
+</div>
+```
+
+Shape A and Shape B can be mixed within the same callout — each `.callout-item` makes the choice independently. A single-mechanism "When did it break?" answer can sit alongside a multi-driver "What drove the improvement?" answer in the same callout box.
 
 ---
 
@@ -1827,6 +1886,7 @@ Plotly.newPlot('trend-90day', traces90d, {
 | c022 | 2026-05-14 | Section 2 action card spec — added evidence threshold rule: before creating a standalone action card, verify both the rate drop and raw event count. Directional signals from small samples belong as a sub-bullet inside the most relevant existing card, not as a standalone card. Example sub-bullet wording provided. |
 | c023 | 2026-05-14 | Section 3 "What belongs in Section 3" — added fixed ordering for always-present blocks (numbered 1–8: mix cascade + Fixed Segment banner → Geo/Non-Geo → Shapley → daily trend → primary driver cuts → secondary driver evidence → ruled-out dimensions → hypotheses explored). Conditional blocks (inventory, session recordings, price) slot within primary driver evidence. Replaces the previous unordered table header which gave no sequencing signal. |
 | c024 | 2026-05-08 | Added "URL-level breakdown block" HTML pattern section, placed before the inventory section format. Fills the gap where the "What belongs in Section 3" table listed "URL-level breakdown" with no format spec. Two verdict forms: performance verdict (rate dropped, share held) and routing verdict (share shifted, rates held). Table columns: URL · Period · Users · % of LP · LP2S · S2C · C2O · CVR. `.highlight-row` on URLs where rate dropped meaningfully or `pct_of_lp` shifted substantially. Pointer to the dedicated URL breakdown query in `context.md` (not the canonical L2+ query — that query does not produce `pct_of_lp`). |
+| c030 | 2026-05-28 | **Bulleted shape added to Section 1 callout.** Section 1c spec documents two answer shapes inside each `.callout-item .a`: paragraph (single mechanism, today's default) and lead claim + bullet list (multi-driver). Pick the shape that matches the finding — no threshold rule, no word cap, just judgment. New styling rule 7 makes the preference explicit ("prefer the bullet shape when a callout enumerates drivers"). Visual Spec gains CSS for `.callout-item .a ul/li` (tight bullet spacing inside the existing 15px callout text) and a new "Shape B — multi-driver" HTML pattern alongside the existing single-mechanism pattern. Shape A and Shape B can mix within the same callout — each `.callout-item` makes the choice independently. Driven by the observation that multi-mechanism CVR-improvement and decline callouts were degrading to dense paragraphs with inline `(1)/(2)/(3)` markers, making the most-scanned section of the report the hardest to scan. |
 | c029 | 2026-05-28 | **Tab framework documented as an HTML pattern, not a render-pipeline spec.** "Tabbed report structure → Spec shape" section rewritten as a copy-pasteable HTML pattern (tab bar outside `.container`, two `.tab-pane` wrappers inside). New "Perf-audit tab rendering — markdown → HTML inline" subsection documents the verbatim markdown-to-HTML conversion Claude performs when writing the report. Single-tab / flat-layout instruction clarified: omit the `.tab-bar` and `.tab-pane` wrappers entirely, do not emit vestigial tab markup. Section 3 "What belongs" table rewritten — the two escape-hatch component rows (`analysis_block`, `raw_html`) replaced with a single "Custom analysis block" row that points to the `.analysis-block` HTML pattern. Section opener text updated to reflect the Claude-writes-HTML model. Companion changes in `SKILL.md` c033 (Step 3 reverted) and the `/cvr-rca` slash-command (Step 3 reverted). Driven by CE 243 RCA where the render.py output visibly degraded vs CE 252's hand-authored quality. |
 | c028 | 2026-05-28 | Two new rows in "What belongs in Section 3" table for the v1.15 escape-hatch components — `analysis_block` (wraps arbitrary HTML in the standard Section-3 chrome; the default escape hatch for novel findings, preserves visual consistency) and `raw_html` (true passthrough, no wrapper; for the rare full-bleed callout / custom Plotly container). Section opener gains one sentence pointing readers to the escape hatches when no built-in matches the finding. Codifies the freedom-of-movement guarantee: Claude has the same flexibility it had when writing HTML directly, with the determinism of the templated renderer. Companion changes in `SKILL.md` c032, `scripts/render.py` c033. Driven by CE 252 (Louvre) RCA. |
 | c027 | 2026-05-28 | New "Tab bar placement — full-width, left-anchored" subsection under "Tabbed report structure → Visual differences from CVR-RCA content" documenting the v1.15 move of `.tab-bar` outside `.container`. Tab bar renders full-viewport-width and sticky at the top, with the first button left-anchored to the 40px header content edge — survives any monitor width, no more centered-island appearance on wide screens. Companion changes in `templates/report.html` c032 (.tab-bar CSS updated; new `{{TAB_BAR}}` placeholder) and `scripts/render.py` c032 (assemble() emits tab bar into the new template slot). Single-tab / flat-spec reports byte-identical to v1.14. Driven by CE 252 (Louvre) RCA. |
