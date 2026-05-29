@@ -4,6 +4,25 @@ This file tracks every meaningful change pushed to this repository. Each entry c
 
 ---
 
+## [Unreleased] — v1.21 — Back-to-top floating arrow
+
+**Summary:** A small UX addition. Every report now carries a fixed circular ↑ button in the bottom-right corner; one click scrolls smoothly back to the top of the page. Always visible (no scroll-detection JS to fade in/out), uses the existing `scroll-behavior: smooth` CSS via an anchor link to `<header id="top">` — zero new JavaScript. Hidden on print. Lives entirely in `visual_kit.md` because the chrome is skill-agnostic; any future skill emitting an HTML report inherits it.
+
+### Changes by file
+
+**`references/visual_kit.md`** — c003
+- New `.back-to-top` CSS rule: `position: fixed; bottom: 24px; right: 24px;` — 40×40px circular dark-navy translucent button with subtle box-shadow, hover-brightens and lifts 2px.
+- `@media print { .back-to-top { display: none; } }` so it doesn't appear in printed/PDF exports.
+- Page skeleton example: `<header>` gains `id="top"` as the anchor target; new `<a href="#top" class="back-to-top">↑</a>` placed near the end of `<body>` after `<footer>`.
+
+### What did not change
+
+- No new JavaScript — the existing `html { scroll-behavior: smooth; }` rule (already in the shared style block) handles the scroll animation.
+- No interference with the tab-framework JS — that handler only acts when the anchor target is inside a non-active tab pane; `<header id="top">` is outside any tab pane, so the handler delegates to native browser behavior.
+- No changes to `report_structure.md`, `SKILL.md`, or any per-skill structure file. Pure visual_kit chrome addition.
+
+---
+
 ## [Unreleased] — v1.20 — Header dashboards row (Omni + Sentra)
 
 **Summary:** Every CVR-RCA report header now carries a `.dashboards` row with two pill-button links to external CE-scoped analytics dashboards — Omni Analytics and Sentra. Analysts can jump from the report into either dashboard in one click, with the CE filter pre-applied. The chrome (`.dashboards`, `.dash-label`, `.dash-link` CSS plus a placeholder block in the Page skeleton) lives in the shared `visual_kit.md` so any future skill emitting an HTML report can reuse the same pill style. The two specific URL templates (Omni dashboard ID + filter IDs; Sentra base URL) live in CVR-RCA's `report_structure.md` because they are CE-analytics knowledge, not generic chrome. Only the CE ID is substituted at write time — Omni's date params are constant (the dashboard has built-in pre/post comparison logic for last-30-days vs prior-30-days, independent of the RCA's actual pre/post windows); Sentra defaults to its own 30-day window with no URL date parameters available.

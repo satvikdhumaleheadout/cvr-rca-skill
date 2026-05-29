@@ -546,6 +546,35 @@ When any of those fail, write the report as a single-tab flat layout — no `.ta
   html { scroll-behavior: smooth; }
   .analysis-block:target { box-shadow: 0 0 0 3px #ffe082; transition: box-shadow 0.4s; }
 
+  /* Back-to-top floating button — fixed bottom-right, always visible.
+     Uses anchor link to <header id="top"> so the existing scroll-behavior:smooth
+     handles the scroll without any JS. See Page skeleton for the HTML pattern. */
+  .back-to-top {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(26, 26, 46, 0.85);
+    color: #fff;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    z-index: 100;
+    transition: background 0.15s, transform 0.15s;
+  }
+  .back-to-top:hover {
+    background: rgba(26, 26, 46, 1);
+    transform: translateY(-2px);
+  }
+  @media print { .back-to-top { display: none; } }
+
   footer { text-align: center; font-size: 12px; color: #aaa; padding: 24px; margin-top: 20px; }
 </style>
 ```
@@ -591,7 +620,7 @@ Naming convention: `block-<kebab-name>` for tables and text blocks, `chart-<keba
 </head>
 <body>
 
-<header>
+<header id="top">
   <div class="eyebrow">CVR Root Cause Analysis</div>
   <h1>[CE Name] — CE [ID]</h1>
   <div class="meta">
@@ -616,6 +645,10 @@ Naming convention: `block-<kebab-name>` for tables and text blocks, `chart-<keba
 </div>
 
 <footer>Generated [date] · CVR-RCA · CE [ID] [CE Name]</footer>
+
+<!-- Back-to-top floating arrow — fixed bottom-right, always visible.
+     Scrolls to the <header id="top"> via the CSS scroll-behavior: smooth. -->
+<a href="#top" class="back-to-top" aria-label="Back to top" title="Back to top">↑</a>
 
 <!-- Plotly chart scripts go here -->
 </body>
@@ -940,4 +973,5 @@ Plotly.newPlot('trend-90day', traces90d, {
 | # | Date | Changes |
 |---|------|---------|
 | c001 | 2026-05-28 | Initial version. Skill-agnostic visual primitives extracted from `cvr-rca/references/report_structure.md` (v1.19): shared `<style>` block (CSS for header / container / metric cards / callout / action cards / analysis blocks / verdict lines / tables / shapley flex bar / fixed segment banner / ref-link / tab bar / md-content); Page skeleton; Section label; Metric cards HTML; Root cause callout HTML (Shape A paragraph + Shape B multi-driver bullet); Action card HTML; Analysis block (general pattern); Table with highlight rows; Plotly chart conventions; Anchor ID convention; Styling and language guidelines (rules 1–7); Slack integration & link-to-table styling; Tabbed report structure (full HTML pattern); Anti-patterns. Read by any skill producing an HTML report. |
+| c003 | 2026-05-29 | Back-to-top floating arrow added. New `.back-to-top` CSS rule defines a fixed bottom-right circular button (40px, dark navy translucent background, subtle box-shadow, hover-brightens + lifts 2px). HTML pattern in Page skeleton: a single `<a href="#top" class="back-to-top" aria-label="Back to top">↑</a>` placed near the end of `<body>` after the `<footer>`. `<header>` gains `id="top"` as the anchor target. The existing `html { scroll-behavior: smooth; }` rule handles the smooth scroll without any JS. Hidden on print via `@media print { .back-to-top { display: none; } }`. Always visible (no scroll-detection JS) — kept minimal per "very small UX addition" framing. |
 | c002 | 2026-05-28 | Dashboards row chrome added to header CSS — `.dashboards`, `.dash-label`, `.dash-link` rules support an optional row of pill-button links to external dashboards scoped to the same entity as the report. Page skeleton example gains a placeholder `<div class="dashboards">` block inside `<header>`, with a comment noting the consuming skill's structure file owns the URL templates. Chrome only — URLs are skill-specific (CVR-RCA carries Omni + Sentra in its `report_structure.md` "Dashboards row" section). Companion change in `cvr-rca/references/report_structure.md` c032 (Omni + Sentra URL templates). |
