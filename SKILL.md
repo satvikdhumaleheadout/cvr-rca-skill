@@ -24,14 +24,18 @@ SKILL_DIR=~/.cvr-rca
 If the user has a custom install location, use that path instead. The variable
 must point to the directory that contains this file.
 
-Then read the reference files:
+**Reference files are loaded per phase, not upfront.** When a phase reads a
+reference, it reads the **whole file** — splitting into per-section reads
+would constrain cross-pattern reasoning that produces non-obvious findings.
 
-```bash
-cat "$SKILL_DIR/references/context.md"
-cat "$SKILL_DIR/references/hypothesis.md"
-cat "$SKILL_DIR/references/actions.md"
-cat "$SKILL_DIR/references/report_structure.md"
-```
+Per-phase reads:
+- **Step 1** (run pipeline) — `SKILL.md` only (this file).
+- **Step 2** (investigation: L0 / cascade / L2+ branches / sub-agent
+  reconciliation) — read `references/context.md` and `references/hypothesis.md`,
+  both fully.
+- **Step 3** (write the report) — read `references/actions.md` and
+  `references/report_structure.md`, both fully.
+- **Step 4** (evaluation) — read `evals/evaluator.md`.
 
 ### Version check
 
@@ -72,6 +76,30 @@ the matching category here and use the listed actions for the report's action ca
 
 **`report_structure.md`** — output structure and visual spec. The fixed three-section
 layout every report follows. Read before writing Step 3.
+
+---
+
+## On reading references — a note on freedom
+
+You have complete freedom to form hypotheses, design queries, and follow the
+data wherever it leads. The reference files are not a checklist — they are
+the shared context that lets you exercise that freedom precisely.
+
+- `context.md` gives you the data vocabulary: table schemas, column meanings,
+  query rules, dimension definitions. It is the language. Use it so the
+  queries you write are technically correct against the actual tables.
+- `hypothesis.md` gives you historical patterns: what other investigations
+  found, where to look first when a particular signal appears. These are
+  starting points, not a menu. When the data points to a mechanism the
+  patterns don't cover, follow the data — invent the cross-cut, write the
+  custom query, propose the novel finding.
+- `actions.md` (Step 3 only, after the root cause is confirmed) gives you
+  the cause-to-action library. Novel root causes can produce novel actions,
+  not just remixes from the library.
+
+Reference files are loaded whole when loaded — never in slices. The freedom
+is what matters; the references are what make the freedom precise rather
+than vague.
 
 ---
 
@@ -156,6 +184,17 @@ Mixpanel MCP calls.
 ---
 
 ## Step 2 — Investigate
+
+**Now read the investigation references:**
+
+```bash
+cat "$SKILL_DIR/references/context.md"
+cat "$SKILL_DIR/references/hypothesis.md"
+```
+
+Both are loaded for the entire investigation phase. Cross-pattern reasoning
+across them is expected — a pattern in `hypothesis.md` often combines with a
+query template in `context.md` and a creative cross-cut to produce the leaf.
 
 Read `summary.json`. Then run the investigation as a tree: orient at L0 using
 everything that is already computed, open branches at L1, descend to a leaf.
@@ -859,6 +898,19 @@ Once all open items are resolved or explicitly accepted, proceed to Step 3.
 
 ## Step 3 — Write the report
 
+**Now read the report-writing references:**
+
+```bash
+cat "$SKILL_DIR/references/actions.md"
+cat "$SKILL_DIR/references/report_structure.md"
+```
+
+`actions.md` is deliberately deferred to Step 3 — the Step 2b synthesis you
+just completed reached the root cause without being biased toward existing
+action templates. Now match the confirmed root cause to its action category
+and populate the action cards. Novel root causes can produce novel actions,
+not just remixes from the library.
+
 Write `report.html` directly. Follow `references/report_structure.md` exactly —
 the file owns the CSS, the HTML patterns for every component, the tab structure,
 and the styling guidelines. Source every claim from `findings.md`. Write the
@@ -1021,6 +1073,7 @@ not generic "investigate further" text.
 | c029 | 2026-05-22 | Slack reconciliation expanded into four-pattern model and made bidirectional. Step 2b check #9 rewritten: signals classified into Pattern A (direct corroboration), B (mechanism explanation), C (reframing context), D (testable gap), or rejected. Reaffirms that Slack is consulted **only** at this point — never during L0/L1/L2 — the fire-and-forget pattern is deliberate so Slack doesn't steer branch selection. Pattern A on declines gets a citation-elevation rule (bare `(corroborated ↗)` becomes named `(per Author · date ↗)` when the action is going to a DRI). Pattern B routes to Layer 1 narrative weaving + Section 3 Market Context block. Pattern C routes to a Layer 2 Important Context callout-item in Section 1 (high bar — four decision-changing tests); how to phrase the citation when the Slack timeframe differs from the report's pre/post is a styling concern handled in `report_structure.md → "Timeframe-citation rule"` (SKILL.md only points to it; the spec itself lives in the styling file). Added high-value gap categories list (operational events: assortment changes, pricing levers, content updates, product restructures, API migrations, vendor moves) — Pattern D recognises these as good retrospective query candidates. Added "one citation per concept" rule. Step 4 footer hardened: the two output lines are the only chat output — no narrative summary, no Slack recap, no highlights block. Session recordings rule extended explicitly to improvement loci (decline = look for failure; improvement = verify smooth flow + surface new UI elements). L2+ section gains direction-sensitive language and a pointer to `hypothesis.md → "Improvement direction — first-pass branches"` when CVR improved. Catalogue change called out as a first-class data-driven hypothesis (no Slack input required to trigger). |
 | c027 | 2026-05-21 | First-pass batch parallelised via sub-agents. "Run all branches within a level in parallel" replaced with a five-step spawning protocol: (1) write SQL for every cut before spawning, (2) open transcript section, (3) spawn one sub-agent per cut — each receives only SQL + output path + output contract (no reference files, context isolation enforced), (4) wait for all sub-agents before reading any result, (5) fill transcript and synthesise from the combined picture. Batch JSON files saved to `<run_dir>/batch_<cut_name>.json`. Failure handling: missing or empty JSON = DATA PULL FAILURE, log and continue, do not re-query inline. Applies to the first-pass branch set only; deeper levels (L2, L3) remain sequential. |
 | c030 | 2026-05-22 | Perf-audit companion-skill integration. When the cascade fixes on Paid (conversion path at L2/L3, or routing exit at L2/L3), spawn the perf-audit sub-agent at the end of the cascade and continue immediately — mirrors the Slack fire-and-forget pattern. Sub-agent runs the standalone perf-audit skill ([aaradhyaraiHO/perf-audit-skill](https://github.com/aaradhyaraiHO/perf-audit-skill)) with the CE name and pre/post date windows; returns a structured summary at `<run_dir>/perf_audit_summary.md` and the full report at `<run_dir>/perf_audit_report.md`. Summary shape: overall verdict, traffic-quality assessment (SIS/CPC/Paid CVR trends), campaign status (pauses, tROAS suppression, budget exhaustion), one-sentence key finding, optional surprise hypothesis. Funnel data deliberately excluded from the summary — perf-audit's attribution differs from Mixpanel's, and CVR-RCA owns the funnel numbers. Step 2b gains check #10 (Perf-audit reconciliation): same four-pattern routing as Slack — Pattern A corroborates a leaf, B names the campaign-level *why*, C reframes the root cause when traffic quality degraded alongside a page finding, D tests a surprise hypothesis with one query max. Path resolution: `$PERF_AUDIT_SKILL_PATH` env var → `~/.perf-audit-skill/SKILL.md` (companion install) → sibling directory → legacy `~/Documents/perf-audit-skill/`. If none resolve, log "Perf-audit skill not installed — skipped" and continue. hypothesis.md LP2S and Mix sections gain background-context pointers explaining that the perf-audit verdict folds in at Step 2b, never during dimension-cut phase. INSTALL.md Step 6 adds an optional companion install. Perf-audit is consulted *only* at Step 2b — the data-driven branches must reach their own leaves before the perf-audit verdict is read, so it corroborates or surprises a completed picture rather than steering branch selection. |
+| c034 | 2026-05-28 | **Lazy-load references by phase.** "Before you begin" rewritten — Claude no longer reads all four references upfront. Per-phase reads: Step 1 reads SKILL.md only; Step 2 reads `context.md` + `hypothesis.md` (both, fully) at the start of investigation; Step 3 reads `actions.md` + `report_structure.md` (both, fully) at the start of report writing; Step 4 reads `evals/evaluator.md`. Files are loaded whole when loaded — section-level reads are explicitly rejected because they would constrain the cross-pattern reasoning that produces non-obvious findings. New "On reading references — a note on freedom" subsection codifies the principle: Claude has complete freedom to form hypotheses, design queries, and follow the data wherever it leads; references provide the shared context that makes the freedom precise rather than vague (data vocabulary in `context.md`, historical patterns as starting points in `hypothesis.md`, cause-to-action library at Step 3 in `actions.md`). The actions library is deliberately deferred to Step 3 so the Step 2b synthesis stays clean of action-template matching bias — Claude reaches its own root-cause conclusions before being shown what actions exist. Driven by the realisation that upfront loading of all four references (~85+ KB) at Step 1 splits attention across irrelevant patterns during early-phase reasoning, subtly biasing hypothesis selection. |
 | c033 | 2026-05-28 | **Step 3 reverted to Claude-writes-HTML.** Removed the `report_spec.json` + `scripts/render.py` prescription and the "Investigation drives the report" subsection (escape-hatch components). The report is now a single hand-authored HTML file following the patterns in `report_structure.md`. The v1.14 spec-JSON pipeline was constraining output quality — render.py's built-in component renderers (`metric_cards`, `mbho_channel_table`, `shapley_waterfall`, etc.) ship pre-v1.13 inline-styled HTML that doesn't match the v1.15 template's polished `.analysis-block` chrome, so reports rendered through the pipeline looked visually inconsistent. Claude-writes-HTML produces uniformly polished output (CE 252 was built this way and remains the quality target). The tab framework survives as a documented HTML pattern in `report_structure.md`, not as a render pipeline. Companion changes in `report_structure.md` c029 (tab + perf-audit inline patterns documented), `/cvr-rca` slash-command (Step 3 reverted to write-HTML-directly). Driven by CE 243 (Eiffel Tower) RCA, where the pipeline-rendered output visibly degraded vs CE 252's hand-authored quality. |
 | c032 | 2026-05-28 | New Step 3 subsection "Investigation drives the report, not the inverse" introduces the escape-hatch components (`analysis_block`, `raw_html`) with full schemas and a worked cross-cut example. Codifies the principle that the rendering layer serves the investigation: when an investigation surfaces a finding the 19 built-in components can't express, `analysis_block` wraps arbitrary HTML in the standard Section-3 chrome (visual consistency is free) and `raw_html` is pure passthrough for the rare case where the standard chrome is wrong. Includes a guard rail prohibiting cosmetic use — built-ins remain the default for standard cuts; escape hatches are for novel evidence only. Companion changes in `scripts/render.py` c033, `references/report_structure.md` c028. Driven by CE 252 (Louvre) RCA, where the 19-component cap could have silenced novel cross-cut findings. **Superseded by c033 — Step 3 reverted to Claude-writes-HTML; escape-hatch components no longer needed because there is no rendering pipeline to escape from.** |
 | c031 | 2026-05-23 | Tabbed report framework. `report_spec.json` accepts a new `tabs[]` shape — each tab has an `id`, `label`, and either inline `sections[]` (Claude-authored components) or a `source` pointer (e.g., `{"type": "markdown", "path": "perf_audit_report.md"}`). `scripts/render.py` gains a markdown-to-HTML renderer (stdlib only — no PyPI dependency; handles headings + GFM tables + lists + bold/italic/code/links/HR), a tab-bar emitter, and per-tab dispatch. Anchor IDs are injected on every markdown heading with a configurable prefix (default `<tab-id>-`) so cross-tab links stay namespaced — perf-audit headings become `#perfaudit-<slug>` (`5. Coverage + Matchmaking` → `perfaudit-coverage-matchmaking`). `templates/report.html` gains sticky tab-bar CSS, `.md-content` + `.md-table` styling for markdown-sourced tabs, and a ~50-line vanilla-JS handler that switches tabs when `.ref-link` anchors target a non-active pane (with Plotly resize for charts in newly-visible panes). Step 3 writes the tabs-shaped spec when `perf_audit_report.md` exists and is non-empty; otherwise it writes the legacy flat spec — backward compatibility is byte-identical for single-tab runs. Step 2b check #10 extended: every perf-audit citation must carry a `↗` linking to the appropriate `#perfaudit-*` anchor per the routing table in `report_structure.md → "Tabbed report structure → Citation routing"`. The framework is scalable — a third tab (future experiment-RCA, supply-RCA, etc.) is one config entry, not a rewrite. |

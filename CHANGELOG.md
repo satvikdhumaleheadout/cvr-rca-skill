@@ -4,6 +4,32 @@ This file tracks every meaningful change pushed to this repository. Each entry c
 
 ---
 
+## [Unreleased] — v1.17 — Lazy-load references by phase
+
+**Summary:** Claude no longer reads all four reference files upfront. Reading is deferred to the phase that needs the file: `context.md` + `hypothesis.md` at Step 2 (investigation), `actions.md` + `report_structure.md` at Step 3 (writing the report), `evals/evaluator.md` at Step 4. Step 1 reads only `SKILL.md`. Files are loaded **whole** when loaded — section-level reads are explicitly rejected because they would constrain the cross-pattern reasoning surface that produces non-obvious findings (cross-cuts, catalogue-change recognition, the connections between query templates and historical patterns). The change is about *when* to load, not *what* to load. A new "On reading references — a note on freedom" subsection in SKILL.md codifies the operating principle: Claude has complete freedom to form hypotheses, design queries, and follow the data wherever it leads; references are the shared context that makes that freedom precise rather than vague. `actions.md` is deliberately deferred to Step 3 so the Step 2b synthesis reaches the root cause without being biased toward existing action templates — novel root causes can produce novel actions, not just remixes of the library.
+
+### Changes by file
+
+**`SKILL.md`** — c034
+- "Before you begin" rewritten — reference reads moved out of the upfront block and into per-phase opening instructions. New "Per-phase reads" table at the top of the section.
+- New "On reading references — a note on freedom" subsection between the file-role descriptions and "Your role". States the freedom principle explicitly; positions `context.md` as the data vocabulary, `hypothesis.md` as starting-point patterns (not a menu), `actions.md` as the Step 3-only cause-to-action library.
+- Step 2 opening — new instruction at the top: read `context.md` + `hypothesis.md` now, both fully.
+- Step 3 opening — new instruction at the top: read `actions.md` + `report_structure.md` now, both fully. Includes the explicit rationale for deferring `actions.md` to Step 3 (clean synthesis at Step 2b without action-template bias).
+- Step 4 unchanged — already reads `evals/evaluator.md` at that phase.
+
+### What did not change
+
+- Reference content — no file split, no section subdivision, no rewording of patterns. `context.md`, `hypothesis.md`, `actions.md`, `report_structure.md` are unchanged.
+- Investigation logic — Steps 1, 2, 2b, 4 work the same way; only the timing of reference reads changed.
+- Slack / perf-audit sub-agent fire-and-forget timing.
+- v1.16 Claude-writes-HTML workflow.
+
+### Why this design
+
+The original upfront-read instruction made sense when the skill was smaller, but the four references together are now ~85 KB and most of that content is not needed at most phases. Loading `actions.md` 30+ minutes before Step 3 risks biasing the Step 2b synthesis toward action-template matching; loading `report_structure.md` during investigation pulls Claude toward report-shape thinking when it should be doing investigation thinking. Lazy-loading by phase preserves the same total context volume across a run but ~halves the concurrent volume at any single phase. The discipline of "whole file or nothing" preserves the cross-pattern reasoning that produced CE 252's catalogue-change finding and CE 243's cross-cut leaf — splitting files into per-topic sub-files would constrain exactly the creative connection-making that the skill is designed to encourage.
+
+---
+
 ## [Unreleased] — v1.16 — Retire spec-JSON + render.py pipeline; restore Claude-writes-HTML
 
 **Summary:** v1.14 added a `report_spec.json` + `scripts/render.py` rendering pipeline to support a multi-tab deliverable (CVR-RCA + Paid Performance Audit). v1.15 added escape-hatch components (`analysis_block`, `raw_html`) and left-aligned the tab bar. Both releases solved a real tab problem but introduced a quality regression: render.py's 19 built-in component renderers (`metric_cards`, `mbho_channel_table`, `shapley_waterfall`, `dimension_table`, `experience_table`, `trend_chart`, `action_cards`, etc.) ship inline-styled HTML from pre-v1.13 — older visual idioms that look utilitarian next to the polished `.analysis-block` chrome the v1.15 template defined. When a report mixes built-ins with escape-hatch blocks, two visual eras of the skill end up side-by-side in one document. CE 252 (Louvre, May 27) was hand-authored before v1.14 shipped and remains the quality target; CE 243 (Eiffel Tower, May 28) was rendered through the pipeline and showed the visual drift. v1.16 retires the pipeline for CVR-RCA content and restores the v1.13-era Claude-writes-HTML workflow. The tab framework survives as a documented HTML pattern (tab bar + `.tab-pane` wrappers as a copy-pasteable block in `report_structure.md`); perf-audit markdown is rendered to HTML inline as part of writing the report, with content verbatim. Freedom of movement is total — no component dispatcher to constrain novel findings, no spec JSON to maintain, no rendering pipeline to debug.
