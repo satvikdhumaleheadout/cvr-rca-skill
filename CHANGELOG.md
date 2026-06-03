@@ -4,6 +4,32 @@ This file tracks every meaningful change pushed to this repository. Each entry c
 
 ---
 
+## [v1.23] — 2026-05-29 — Trim one-off `.html` guardrails from the Tab 2 spec
+
+**Summary:** Removes defensive language from the v1.22 spec that warned "if `perf_audit_report.html` exists, ignore it." That paragraph was added when perf-audit-skill had been emitting `.html` locally; once perf-audit-skill was rolled back to markdown-only output (also as part of the v1.22 change set), the warning became obsolete. Scalable skill instructions describe canonical behavior; one-off defensive negations against a failure mode that can't occur belong in commit messages and the changelog, not in the live spec. The canonical rule is unchanged: **Tab 2 reads `perf_audit_report.md` and converts markdown → HTML verbatim.**
+
+### Changes by file
+
+**`SKILL.md`** — c037
+- Step 3 "Tab framework — when to use it" paragraph that started "Important — do NOT use `perf_audit_report.html` even if it exists" is removed. The Tab 2 description is now a single positive instruction (read `.md`, convert verbatim, preserve every section/subsection/word) plus the fallback rule for unparseable markdown.
+
+**`references/visual_kit.md`** — c005
+- "Perf-audit tab rendering" subsection: the "Source of truth: never `perf_audit_report.html`" line is removed. The fidelity rules section stays unchanged.
+- Anti-pattern row rewritten to focus on the positive rule (don't wrap perf-audit content in CVR-RCA chrome) without enumerating the specific `.html` failure mode.
+
+### What did not change
+
+- The v1.22 fidelity rules (every section, every subsection, every word preserved). Same.
+- The conversion mapping (markdown → HTML tag table). Same.
+- The fallback to `<pre class="md-raw">` for unparseable constructs. Same.
+- perf-audit-skill behavior. Already rolled back to markdown-only in v1.22.
+
+### Why this design
+
+Skill instructions accumulate during firefights — "if X breaks, do Y" — and never get pruned. The result is a spec that gets longer, more defensive, and harder for new readers to parse. The v1.22 `.html`-ignore rule was real and necessary when written, but once the upstream cause was fixed (perf-audit-skill stopped emitting `.html`), the defensive rule was just describing a problem that can't happen. Removing it now keeps the spec scalable: any future skill emitting markdown for embedding follows the same canonical Tab 2 path, with no special-case negotiation. If a similar issue recurs in the future, the right move is to fix the producing skill, not to permanently inflate the consuming spec.
+
+---
+
 ## [v1.22] — 2026-05-29 — Tab 2 sources from perf-audit `.md` verbatim (partial revert of v1.19's HTML embed)
 
 **Summary:** CVR-RCA's Tab 2 (Paid Performance Audit) reverts to verbatim markdown → HTML rendering of `perf_audit_report.md`. The v1.19 design had Tab 2 byte-paste from `perf_audit_report.html` — a polished HTML file the perf-audit-skill emits alongside its markdown. That design relied on perf-audit-skill's md→html step being faithful. In practice it isn't: perf-audit-skill restructures and summarizes during its own md→html conversion, collapsing h3/h4 subsections into parent h2 sections, dropping appendices, and adding CVR-RCA-style chrome (callouts, action cards) around its content. Result: CE 3593's Tab 2 was 31% smaller than the source `.md` (2,051 words vs 2,975), with sub-headings like `4a. Campaign roster, post-consolidation`, `5c. Money on table (sized)`, the Monthly Trajectory appendix, and the Data Sources section all collapsed or dropped.
