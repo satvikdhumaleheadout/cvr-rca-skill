@@ -774,6 +774,34 @@ Save to: `<run_dir>/findings.md`
    for the trigger rule and `context.md → "Cross-cut query template"` for the
    query.
 
+**Context reconciliation (checks #9–#11) — read every available lens.** The
+next three checks all do the same thing with different inputs: reconcile your
+completed, data-driven picture against an external **lens** (Slack, perf-audit,
+CE Health). They share one model and one hard rule.
+
+- **The lens manifest.** Read `<run_dir>/orchestration.json` if it exists and
+  use its `context_lenses` array as the authoritative list of lenses to
+  reconcile (this is the master-orchestrated case — the CE-RCA umbrella declares
+  exactly what ran). If there's no orchestration file (standalone `/cvr-rca`),
+  fall back to file-presence detection: reconcile whichever of
+  `slack_context.md`, `perf_audit_summary.md` / `perf_audit_report.md`,
+  `ce_health_report.md` actually exist in the run dir. Either way, **only
+  reconcile lenses that are present** — a lens that didn't run is simply absent,
+  not an error.
+- **One model, applied per lens.** Every lens is reconciled with the same
+  four-pattern classification — **A** direct corroboration, **B** mechanism
+  explanation, **C** reframing context, **D** testable gap, or **Reject**. The
+  pattern definitions are identical across lenses; only the lens's content and
+  its cross-tab anchor prefix differ.
+- **The hard rule — consult lenses ONLY here.** Never during L0/L1/L2. The
+  fire-and-forget timing is deliberate: the data-driven investigation must reach
+  its own leaf first, so a lens *corroborates or surprises a completed picture*
+  rather than steering branch selection. This is what keeps the investigation
+  honest.
+- **Scalable by design.** A future lens (e.g., an AOV-RCA sibling) is one more
+  manifest entry reconciled with the same model — not a new mechanism. Checks
+  #9–#11 below are the per-lens specifics for the three lenses that exist today.
+
 9. **Slack context reconciliation** — read `<run_dir>/slack_context.md`. If the
    file does not exist yet, wait briefly (the sub-agent may still be running);
    if still missing after a short wait, log "Slack context unavailable — skipped"
@@ -919,6 +947,51 @@ Save to: `<run_dir>/findings.md`
     the table; do not invent anchors. If `perf_audit_report.md` is empty or
     missing, the tab is omitted and citations should reference the
     `perf_audit_summary.md` file inline instead — but this is the rare path.
+
+11. **CE Health reconciliation** (master-orchestrated runs) — if
+    `<run_dir>/ce_health_report.md` is present (the CE-RCA umbrella ran CE Health
+    first), reconcile your funnel findings against it. CE Health is the **wide,
+    upstream** lens: it decomposed the CE's revenue move via Shapley across
+    Traffic / CVR / AOV / Completion / Take Rate, and carries CE-level facts your
+    funnel investigation doesn't see (per-channel revenue, per-TGID RPC, L12M
+    trajectory). It finished in the master's Step 0, so it's always available
+    here — no wait needed. Same hard rule: consulted **only** at this point, not
+    during L0/L1/L2.
+
+    The two highest-value reconciliations:
+
+    **Entity-level cross-link (most common Pattern A).** When your investigation
+    localized a funnel drop to a specific experience or TGID, check whether CE
+    Health flagged that same entity at the revenue/RPC level. If CE Health shows,
+    say, TGID 7148's RPC dropped 30% and you localized an S2C collapse on that
+    same TGID — that's direct corroboration from a different altitude. Cite it on
+    the leaf's evidence line and Section 3 verdict subtext:
+    `(CE Health: TGID 7148 RPC −30% ↗)`.
+
+    **Headline-driver reframe (Pattern C).** CE Health's Shapley names the
+    *headline* mover of CE revenue. If it says CVR drove the revenue change, your
+    funnel deep-dive is the headline story — proceed at full confidence. But if
+    CE Health says the headline mover was **AOV** or **Completion Rate or Take
+    Rate** (factors CVR-RCA doesn't investigate), your funnel finding is real but
+    *not the headline* — say so explicitly in the root cause callout, and point
+    the reader to the CE Health tab for the dominant driver. This prevents a
+    correct-but-secondary funnel finding from being mis-presented as *the* reason
+    CE revenue moved.
+
+    Pattern B (CE Health names a mechanism your funnel finding lacked) and
+    Pattern D (a CE Health fact you can test in the funnel table with one query)
+    apply exactly as for the other lenses. **Reject** CE Health signals that only
+    restate the symptom.
+
+    **Cross-tab citations.** CE Health renders as its own tab in the composite
+    with `#cehealth-<slug>` anchors. Every CE Health citation carries a `↗`
+    linking to the relevant `#cehealth-*` section (e.g.
+    `#cehealth-driver-diagnosis-shapley`, `#cehealth-top-tgids`). Slugs follow the
+    same rule as perf-audit (lowercase, strip leading "N. ", hyphenate).
+    **Standalone safety:** only emit a `#cehealth-*` citation when
+    `ce_health_report.md` was actually present. A standalone `/cvr-rca` run has no
+    CE Health lens and no CE Health tab, so it emits no such citation — never
+    leave a dangling anchor.
 
 Once all open items are resolved or explicitly accepted, proceed to Step 3.
 
@@ -1116,6 +1189,7 @@ not generic "investigate further" text.
 | c030 | 2026-05-22 | Perf-audit companion-skill integration. When the cascade fixes on Paid (conversion path at L2/L3, or routing exit at L2/L3), spawn the perf-audit sub-agent at the end of the cascade and continue immediately — mirrors the Slack fire-and-forget pattern. Sub-agent runs the standalone perf-audit skill ([aaradhyaraiHO/perf-audit-skill](https://github.com/aaradhyaraiHO/perf-audit-skill)) with the CE name and pre/post date windows; returns a structured summary at `<run_dir>/perf_audit_summary.md` and the full report at `<run_dir>/perf_audit_report.md`. Summary shape: overall verdict, traffic-quality assessment (SIS/CPC/Paid CVR trends), campaign status (pauses, tROAS suppression, budget exhaustion), one-sentence key finding, optional surprise hypothesis. Funnel data deliberately excluded from the summary — perf-audit's attribution differs from Mixpanel's, and CVR-RCA owns the funnel numbers. Step 2b gains check #10 (Perf-audit reconciliation): same four-pattern routing as Slack — Pattern A corroborates a leaf, B names the campaign-level *why*, C reframes the root cause when traffic quality degraded alongside a page finding, D tests a surprise hypothesis with one query max. Path resolution: `$PERF_AUDIT_SKILL_PATH` env var → `~/.perf-audit-skill/SKILL.md` (companion install) → sibling directory → legacy `~/Documents/perf-audit-skill/`. If none resolve, log "Perf-audit skill not installed — skipped" and continue. hypothesis.md LP2S and Mix sections gain background-context pointers explaining that the perf-audit verdict folds in at Step 2b, never during dimension-cut phase. INSTALL.md Step 6 adds an optional companion install. Perf-audit is consulted *only* at Step 2b — the data-driven branches must reach their own leaves before the perf-audit verdict is read, so it corroborates or surprises a completed picture rather than steering branch selection. |
 | c037 | 2026-05-29 | **Trimmed the "ignore `perf_audit_report.html`" defensive paragraph from Step 3.** The instruction was a one-off guardrail added in c036 (when perf-audit-skill had been emitting `.html` locally) but became obsolete once perf-audit-skill was rolled back to emitting markdown only. Carrying a defensive negation against a failure mode that can't occur is over-specification — it pollutes the spec with a CVR-RCA-vs-perf-audit-skill negotiation that future maintainers shouldn't need to understand. The canonical rule remains: "Tab 2 reads `perf_audit_report.md` and converts verbatim." Skill instructions should describe canonical behavior, not enumerate every potential failure mode. Companion change in `visual_kit.md` c005. |
 | c038 | 2026-06-03 | **Orchestration-handshake delegation check in the perf-audit spawn block** — enables CVR-RCA to run as a sub-skill of the new CE-RCA master skill without double-firing perf-audit. Before deciding to spawn the perf-audit sub-agent, CVR-RCA now checks for `<run_dir>/orchestration.json`; if `perf-audit-skill` appears in its `fired_by_master` array, a parent orchestrator is already running perf-audit against the same run directory, so CVR-RCA logs the delegation and skips its own spawn — then consumes the shared `perf_audit_report.md` at Step 2b check #10 as usual (the existing wait-for-file polling handles any timing race). Belt-and-braces secondary check: skip the spawn if `perf_audit_report.md` already exists even without an orchestration file. Standalone `/cvr-rca` runs are unchanged — neither file exists, so the normal spawn fires. This is the only CVR-RCA change required by the CE-RCA umbrella skill (which lives in its own repo and orchestrates CE Health → CVR-RCA + perf-audit → composite tabbed report). Sub-skill outputs remain verbatim; CVR-RCA's report and behavior are otherwise untouched. |
+| c039 | 2026-06-03 | **Manifest-driven context layer + CE Health as a new reconciliation lens.** Step 2b's per-lens reconciliation checks (#9 Slack, #10 perf-audit) are reframed under a shared "Context reconciliation — read every available lens" preamble: read the authoritative lens list from `<run_dir>/orchestration.json` `context_lenses` when present (master-orchestrated), else fall back to file-presence detection (standalone). One four-pattern model (A/B/C/D/Reject) applied per lens; lenses consulted ONLY at Step 2b, never during L0/L1/L2. New check #11 — **CE Health reconciliation**: when `ce_health_report.md` is present (CE-RCA umbrella ran CE Health first), reconcile funnel findings against the wide upstream lens. Two highest-value reconciliations: (A) entity-level cross-link — when a funnel drop is localized to an experience/TGID, corroborate against CE Health's revenue/RPC flag for that same entity (`CE Health: TGID 7148 RPC −30% ↗`); (C) headline-driver reframe — if CE Health's Shapley names AOV/Completion/Take Rate (factors CVR-RCA doesn't investigate) as the headline mover, say the funnel finding is real but not the headline and point to the CE Health tab. Cross-tab citations use `#cehealth-<slug>` anchors; standalone-safe (no CE Health present → no citation emitted). Scalable: a future sibling lens is one more manifest entry, same model. Companion change in `visual_kit.md` c006 (registers `summary-*` + `cehealth-*` anchor prefixes and the CE Health citation form). This is the CVR-RCA side of the cross-skill RCA work; the Summary synthesis tab and the orchestration manifest live in the CE-RCA repo. |
 | c036 | 2026-05-29 | **Step 3 Tab 2 reverts to verbatim markdown render — partially undoes c035.** Tab 2 now reads `<run_dir>/perf_audit_report.md` (canonical text artifact) and converts markdown → HTML verbatim using the conversion mapping in `visual_kit.md → "Perf-audit tab rendering"`. **`perf_audit_report.html` is explicitly ignored** even if present — the perf-audit-skill's own md→html step may restructure or summarize content (h3/h4 subsections collapsed into parent h2, appendices dropped) and CVR-RCA can't trust that derivative. Fidelity rules added: every section, every subsection (4a, 4b, 5a, 5b, 5c, Appendix, Data Sources), every table cell, every paragraph preserved verbatim. No CVR-RCA chrome wrapped around perf-audit content — the perf-audit's structure is the perf-audit's structure. New fallback rule: if the markdown contains a construct the conversion mapping doesn't cover, embed raw markdown text inside `<pre class="md-raw">`. Companion changes in `visual_kit.md` c004 (Perf-audit tab rendering rewritten; missing `.md-content` and `.md-table` CSS finally added; new `.md-raw` styling; two new Anti-patterns). Driven by CE 3593 RCA where Tab 2 was 31% smaller than the source `.md` (2,051 words vs 2,975) due to perf-audit-skill's html restructuring. perf-audit-skill local Step 6 (added in c035 era) rolled back; perf-audit-skill returns to emitting `.md` only. |
 | c035 | 2026-05-29 | **Step 3 Tab 2 rendering switches to HTML embed.** When perf-audit ran successfully, CVR-RCA's Tab 2 now reads `<run_dir>/perf_audit_report.html` (the polished HTML deliverable that perf-audit emits as a sibling of its markdown report), extracts the body content (everything between `<body>` and `</body>`, stripping any `<header>` inside), and pastes verbatim into `<div class="tab-pane" id="tab-perfaudit">`. Byte-paste, not comprehension — the HTML carries its own `perfaudit-<slug>` anchor IDs, headings, and chrome from the shared `visual_kit.md` both skills now reference. Fallback for older perf-audit versions (only emits markdown): legacy v1.16 inline md→HTML render. Companion changes in `report_structure.md` c031 (split into `visual_kit.md` + this file — primitives extracted), new `references/visual_kit.md` (shared design system), perf-audit-skill `perf_audit_structure.md` (new file defines perf-audit's section layout on top of visual_kit), perf-audit-skill SKILL.md (new Step 6 emits HTML alongside markdown). Visual quality goes up (embedded perf-audit content inherits CVR-RCA's visual_kit CSS, so it looks visually identical to surrounding Tab 1 content); Claude's reading load goes down (no markdown→HTML conversion at Step 3 — that work now happens once inside perf-audit, not on every CVR-RCA report write). Markdown artifacts (`perf_audit_summary.md`, `perf_audit_report.md`) unchanged — they remain Claude's input for Step 2b reconciliation reasoning. HTML is a presentation artifact, opaque to Claude at the embed step. |
 | c034 | 2026-05-28 | **Lazy-load references by phase.** "Before you begin" rewritten — Claude no longer reads all four references upfront. Per-phase reads: Step 1 reads SKILL.md only; Step 2 reads `context.md` + `hypothesis.md` (both, fully) at the start of investigation; Step 3 reads `actions.md` + `report_structure.md` (both, fully) at the start of report writing; Step 4 reads `evals/evaluator.md`. Files are loaded whole when loaded — section-level reads are explicitly rejected because they would constrain the cross-pattern reasoning that produces non-obvious findings. New "On reading references — a note on freedom" subsection codifies the principle: Claude has complete freedom to form hypotheses, design queries, and follow the data wherever it leads; references provide the shared context that makes the freedom precise rather than vague (data vocabulary in `context.md`, historical patterns as starting points in `hypothesis.md`, cause-to-action library at Step 3 in `actions.md`). The actions library is deliberately deferred to Step 3 so the Step 2b synthesis stays clean of action-template matching bias — Claude reaches its own root-cause conclusions before being shown what actions exist. Driven by the realisation that upfront loading of all four references (~85+ KB) at Step 1 splits attention across irrelevant patterns during early-phase reasoning, subtly biasing hypothesis selection. |

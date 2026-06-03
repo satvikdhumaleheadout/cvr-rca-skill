@@ -4,6 +4,32 @@ This file tracks every meaningful change pushed to this repository. Each entry c
 
 ---
 
+## [v1.25] — 2026-06-03 — CE Health as a reconciliation lens + manifest-driven context layer
+
+**Summary:** CVR-RCA now reads **CE Health** at its Step 2b synthesis — the missing cross-skill wire that lets the funnel RCA corroborate against, and reframe relative to, the CE-level health picture. Until now CVR-RCA reconciled its data-driven findings against Slack and perf-audit but was blind to CE Health (the wide upstream lens that decomposes the CE's revenue move across Traffic/CVR/AOV/Completion/Take Rate). When CVR-RCA runs under the CE-RCA umbrella, it now picks up CE Health's facts and weaves them in — e.g., localizing an S2C collapse on TGID 7148 *and* citing CE Health's 30% RPC drop for that same TGID, or stepping back to say "the funnel finding is real but AOV was the headline mover per CE Health" when Shapley points elsewhere. To make this scale (rather than bolting on a #11, #12, #13 forever), the per-lens checks are reframed under one **manifest-driven context layer**: read the lens list from `orchestration.json` when the master declares it, else detect by file presence — then reconcile every present lens with the same four-pattern model. A future sibling lens is one manifest entry, not new machinery.
+
+### Changes by file
+
+**`SKILL.md`** — c039
+- Step 2b gains a "Context reconciliation — read every available lens" preamble: the lens manifest (`orchestration.json` `context_lenses` → file-presence fallback), the one-model rule (four-pattern A/B/C/D/Reject per lens), and the hard rule (lenses consulted only at Step 2b, never during L0/L1/L2).
+- New check #11 — CE Health reconciliation: entity-level cross-link (Pattern A corroboration on a shared TGID/experience), headline-driver reframe (Pattern C when CE Health's Shapley names AOV/Completion/Take Rate), B/D as usual. `#cehealth-<slug>` cross-tab citations, standalone-safe (no CE Health present → no citation).
+- VERSION → 1.25.0.
+
+**`references/visual_kit.md`** — c006
+- Registers the `summary-*` and `cehealth-*` cross-tab anchor prefixes (for the CE-RCA umbrella composite) and the CE Health citation form (`per CE Health ↗` / `CE Health: <fact> ↗`).
+
+### What did not change
+
+- The four-pattern model, and the Slack (#9) and perf-audit (#10) reconciliations — same behavior, now framed as manifest lens entries.
+- Standalone `/cvr-rca` — no `orchestration.json`, no `ce_health_report.md` → falls back to file-presence detection, CE Health simply absent, no `#cehealth-*` citations. Byte-compatible with v1.24.
+- Report structure, tab framework, investigation logic, perf-audit and CE Health skills themselves.
+
+### Why this design
+
+The thing that makes CVR-RCA's output good is that it reconciles its own data-driven leaf against every other lens at synthesis time — corroborate, explain, reframe, test. CE Health was a glaring omission: it carries the CE-level "what actually moved revenue" decomposition that should anchor and sometimes reframe a funnel finding. Adding it as check #11 fixes that; reframing the checks as a manifest-driven layer means the *next* lens (an AOV-RCA sibling, say) costs one entry, not a new check and a new code path. The hard rule (consult lenses only at Step 2b) is preserved so the data-driven investigation stays honest — lenses corroborate a completed picture, they never steer branch selection.
+
+---
+
 ## [v1.24] — 2026-06-03 — Orchestration handshake: run cleanly as a sub-skill of the CE-RCA master
 
 **Summary:** CVR-RCA can now be orchestrated by the new **CE-RCA master skill** (a separate repo that runs CE Health → CVR-RCA + perf-audit → one composite tabbed report) without firing perf-audit twice. A new master writes an `orchestration.json` file into the shared run directory listing which sub-skills it's pre-firing. CVR-RCA's perf-audit spawn block now checks that file: if `perf-audit-skill` is listed under `fired_by_master`, CVR-RCA skips its own perf-audit spawn and consumes the master's output at Step 2b check #10 instead. The existing wait-for-file polling at check #10 handles any timing race, so there's no new coordination machinery. **Standalone `/cvr-rca` runs are completely unchanged** — the orchestration file doesn't exist, so the normal fire-and-forget spawn happens exactly as before. This is the only change CVR-RCA needs to participate in the umbrella; its report, investigation logic, and visual output are otherwise identical to v1.23.
