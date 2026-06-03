@@ -210,24 +210,44 @@ Claude writes the tab structure inline in the report. Copy this pattern verbatim
 
 For **single-tab / flat** reports (perf-audit didn't fire, returned DATA GAP, or cascade fixed on Organic), **omit the `.tab-bar` and both `.tab-pane` wrappers entirely**. The body becomes a plain `<div class="container">` with the report content inside. No vestigial tab markup, no inert tab bar with one button.
 
-### Perf-audit tab rendering — markdown → HTML inline
+### Perf-audit tab rendering — markdown → HTML verbatim
 
-When the perf-audit tab is emitted, Claude reads `<run_dir>/perf_audit_report.md` and writes its HTML representation directly into the second tab pane, preserving content verbatim. Only markdown *syntax* is converted to HTML tags — every claim, number, table cell, list item, and section heading is identical to the source file. No claims are paraphrased; no numbers re-rounded; no sections reordered.
+When the perf-audit tab is emitted, Claude reads `<run_dir>/perf_audit_report.md` and writes its HTML representation directly into the second tab pane. **The perf-audit's own structure is the structure of Tab 2 — verbatim.**
 
-Conversion mapping:
-- `# Heading` → `<h1 id="perfaudit-<slug>">Heading</h1>`
-- `## N. Heading` → `<h2 id="perfaudit-<slug>">N. Heading</h2>` (slug strips the leading "N. ")
-- `### Heading` → `<h3 id="perfaudit-<slug>">Heading</h3>`
-- `**bold**` → `<strong>bold</strong>`
-- `*italic*` → `<em>italic</em>`
-- `` `code` `` → `<code>code</code>`
-- `- bullet` → `<ul><li>bullet</li></ul>`
-- `1. numbered` → `<ol><li>numbered</li></ol>`
-- `| pipe | tables |` → `<table class="md-table"><thead>...</thead><tbody>...</tbody></table>`
-- `---` → `<hr>`
-- Paragraph breaks → `<p>...</p>`
+**Source of truth:** always `perf_audit_report.md`. **Never `perf_audit_report.html`** (if such a file exists in the run directory, ignore it — it may have been restructured/summarized by an upstream rendering step we don't control).
 
-The `<div class="md-content">` wrapper carries the styling that makes the markdown structure feel native to the report (h2/h3 hierarchy, list spacing, code blocks, link colors). See "Shared `<style>` block" in the Visual Spec section for the `.md-content` and `.md-table` CSS that supports this.
+**Fidelity rules — no exceptions:**
+- Every section is preserved with its original heading text.
+- Every subsection (h3, h4) is preserved — not collapsed into its parent h2.
+- Every table cell, list item, paragraph, code block, blockquote, and inline element is preserved verbatim.
+- No claims paraphrased, no numbers re-rounded, no sections reordered, no content dropped.
+- The perf-audit's structure is the perf-audit's structure — CVR-RCA does not impose its own Section 1/2/3 / callout / action-card chrome on top of it.
+
+Conversion mapping (markdown syntax → HTML tags, content unchanged):
+
+| Markdown | HTML |
+|---|---|
+| `# Heading` | `<h1 id="perfaudit-<slug>">Heading</h1>` |
+| `## Heading` (with optional leading "N. ") | `<h2 id="perfaudit-<slug>">Heading</h2>` (slug strips the leading "N. ") |
+| `### Heading` (with optional leading "Na. ") | `<h3 id="perfaudit-<slug>">Heading</h3>` |
+| `#### Heading` | `<h4 id="perfaudit-<slug>">Heading</h4>` |
+| `**bold**` | `<strong>bold</strong>` |
+| `*italic*` or `_italic_` | `<em>italic</em>` |
+| `` `code` `` | `<code>code</code>` |
+| `- item` / `* item` | `<ul><li>item</li></ul>` |
+| `1. item` | `<ol><li>item</li></ol>` |
+| `> quote` | `<blockquote>quote</blockquote>` |
+| `[label](url)` | `<a href="url">label</a>` |
+| `| pipe | table |` (GFM) | `<table class="md-table"><thead>…</thead><tbody>…</tbody></table>` |
+| ` ``` fenced code ``` ` | `<pre><code>…</code></pre>` |
+| `---` (hr) | `<hr>` |
+| Paragraph break | `<p>…</p>` |
+
+**Slug rule for heading IDs:** lowercase the heading text, strip a leading numbered prefix like `1. ` / `4a. ` / `Appendix A — ` (whatever is conventionally there), replace non-alphanumerics with hyphens, collapse consecutive hyphens, prepend `perfaudit-`. So `## 4. Paid Deep Dive — Google Search` becomes `id="perfaudit-paid-deep-dive-google-search"`; `### 4a. Campaign roster, post-consolidation (Apr–May 2026 trailing snapshot)` becomes `id="perfaudit-campaign-roster-post-consolidation-apr-may-2026-trailing-snapshot"`. Stable across re-renders as long as the heading text doesn't change.
+
+**Fallback — when the markdown contains a construct we can't convert faithfully:** if any part of the markdown uses syntax not covered above (e.g., perf-audit-skill adds a new construct in a future version), embed the raw markdown text directly inside a `<pre class="md-raw">` block. Better to show raw markdown text than to paraphrase or omit. The fallback should be rare; the conversion mapping above covers everything perf-audit-skill emits today.
+
+**Wrapper:** the entire converted content sits inside `<div class="md-content">` for typography. See the shared `<style>` block for `.md-content`, `.md-table`, and the new `.md-content pre.md-raw` styling.
 
 ### Cross-tab anchor scheme
 
@@ -304,6 +324,8 @@ When any of those fail, write the report as a single-tab flat layout — no `.ta
 | Daily inventory time-series rendered as an HTML table | A 27-row × 4-column date table is unreadable at a glance. The daily time-series is always Plotly line charts. The only table in the inventory section is the TID snapshot summary. |
 | Standalone analysis block that restates a conclusion already shown in a prior block | If a sub-step breakdown (e.g., C2A/A2O) concludes the same thing as an experience mix table that came just before it, the sub-step block adds no new information. Fold the one new data point into the existing block's subtext paragraph and remove the standalone block. Every block in the report should add something the prior block didn't show. |
 | `days_to_first_available_date` presented as the primary supply evidence | It is a single-integer proxy from `product_rankings_features` ("how far out is the first bookable slot?") — collapses real bucketed ticket counts into a yes/no signal. The canonical supply evidence is `inventory_availability` ticket counts per lead-time bucket. The proxy belongs in a corroborating footnote at most, regardless of CVR direction. |
+| Tab 2 (perf-audit) sources from `perf_audit_report.html` or wraps perf-audit content in CVR-RCA-style chrome (Section 1/2/3 callouts, action cards, "What drove the improvement / What's holding it back" rephrasings) | The perf-audit-skill is the source of truth for its own structure. The `.md` file is canonical; any `.html` that lives next to it may have been restructured/summarized and should be ignored. Tab 2 is a verbatim markdown→HTML render of `perf_audit_report.md` — every section, every subsection, every table cell, every word preserved. If the markdown contains a construct we can't convert, fall back to `<pre class="md-raw">` raw markdown text. Fidelity beats polish. |
+| Sub-headings dropped during the perf-audit md→HTML conversion (h3/h4 collapsed into parent h2; section numbering simplified; appendices omitted) | The perf-audit's structure is the perf-audit's structure. Sub-headings like `4a. Campaign roster` and `5c. Money on table (sized)` carry meaning the parent h2 doesn't capture. Conversion is one-to-one with the source markdown — if the `.md` has 22 headings, Tab 2 has 22 headings. |
 
 
 ## Visual Spec — HTML patterns
@@ -574,6 +596,79 @@ When any of those fail, write the report as a single-tab flat layout — no `.ta
     transform: translateY(-2px);
   }
   @media print { .back-to-top { display: none; } }
+
+  /* Markdown-sourced tab content (perf-audit tab and any other markdown-rendered tab).
+     The perf-audit content sits inside <div class="md-content"> for typography that
+     feels native to a polished markdown render — h2/h3 hierarchy, code styling, link
+     colors, GFM table styling — without imposing CVR-RCA's .analysis-block chrome
+     on top of the perf-audit's own structure. See "Perf-audit tab rendering". */
+  .md-content {
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #e8ebf4;
+    padding: 28px 32px;
+    margin: 20px 0;
+    line-height: 1.7;
+  }
+  .md-content h1 { font-size: 22px; font-weight: 800; margin: 24px 0 12px; color: #1a1a2e; }
+  .md-content h2 { font-size: 18px; font-weight: 700; margin: 28px 0 10px; color: #1a1a2e; border-bottom: 1px solid #e8ebf4; padding-bottom: 6px; }
+  .md-content h3 { font-size: 15px; font-weight: 700; margin: 20px 0 8px; color: #2a2a44; }
+  .md-content h4 { font-size: 13px; font-weight: 700; margin: 16px 0 6px; color: #2a2a44; text-transform: uppercase; letter-spacing: 0.05em; }
+  .md-content p { margin: 8px 0; }
+  .md-content ul, .md-content ol { margin: 8px 0 12px 24px; }
+  .md-content li { margin: 4px 0; }
+  .md-content code { font-family: 'SF Mono', Menlo, monospace; font-size: 12px; background: #f5f6fa; padding: 2px 6px; border-radius: 4px; color: #c62828; }
+  .md-content a { color: #3a4a8a; text-decoration: none; border-bottom: 1px solid rgba(58,74,138,0.3); }
+  .md-content a:hover { border-bottom-color: #3a4a8a; }
+  .md-content hr { border: none; border-top: 1px solid #e8ebf4; margin: 24px 0; }
+  .md-content blockquote {
+    border-left: 3px solid #e8ebf4;
+    padding-left: 14px;
+    margin: 12px 0;
+    color: #555;
+    font-style: italic;
+  }
+  .md-content :target { box-shadow: 0 0 0 3px #ffe082; transition: box-shadow 0.4s; border-radius: 4px; }
+
+  /* GFM tables inside .md-content carry .md-table for consistent styling */
+  .md-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+    margin: 12px 0 16px;
+    font-size: 13px;
+  }
+  .md-table th {
+    background: #f5f6fa;
+    color: #8892a4;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 2px solid #e0e4ef;
+    padding: 10px 12px;
+    text-align: left;
+  }
+  .md-table td { border-bottom: 1px solid #f0f1f5; padding: 10px 12px; }
+  .md-table tr:last-child td { border-bottom: none; }
+  .md-table tr:hover td { background: #fafbfd; }
+
+  /* Fallback for the rare case the markdown contains a construct our conversion
+     mapping doesn't cover — we embed the raw markdown text directly inside this
+     <pre> block. Better to show raw markdown than to paraphrase or omit. */
+  .md-content pre.md-raw {
+    background: #f5f6fa;
+    border: 1px solid #e8ebf4;
+    border-radius: 6px;
+    padding: 16px 18px;
+    font-family: 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: #2a2a44;
+    white-space: pre-wrap;
+    overflow-x: auto;
+    margin: 12px 0;
+  }
 
   footer { text-align: center; font-size: 12px; color: #aaa; padding: 24px; margin-top: 20px; }
 </style>
@@ -973,5 +1068,6 @@ Plotly.newPlot('trend-90day', traces90d, {
 | # | Date | Changes |
 |---|------|---------|
 | c001 | 2026-05-28 | Initial version. Skill-agnostic visual primitives extracted from `cvr-rca/references/report_structure.md` (v1.19): shared `<style>` block (CSS for header / container / metric cards / callout / action cards / analysis blocks / verdict lines / tables / shapley flex bar / fixed segment banner / ref-link / tab bar / md-content); Page skeleton; Section label; Metric cards HTML; Root cause callout HTML (Shape A paragraph + Shape B multi-driver bullet); Action card HTML; Analysis block (general pattern); Table with highlight rows; Plotly chart conventions; Anchor ID convention; Styling and language guidelines (rules 1–7); Slack integration & link-to-table styling; Tabbed report structure (full HTML pattern); Anti-patterns. Read by any skill producing an HTML report. |
+| c004 | 2026-05-29 | **Perf-audit tab rendering rewritten + missing `.md-content` / `.md-table` CSS finally added.** Two related fixes: **(1)** The "Perf-audit tab rendering" subsection is rewritten to enforce verbatim markdown → HTML conversion from `perf_audit_report.md`, with explicit rules against summarization / restructuring / dropping subsections (h3/h4 must survive — `4a. Campaign roster`, `5c. Money on table (sized)`, Appendix sections, Data Sources all preserved). Source of truth pinned: `perf_audit_report.md` only. **`perf_audit_report.html` (if it exists) is ignored** because the perf-audit-skill's own md→html step may restructure content we can't control. Conversion mapping expanded to cover blockquotes, h4, fenced code blocks, and the inline link syntax. New fallback rule: if any markdown construct can't be faithfully converted, embed the raw markdown text inside `<pre class="md-raw">` — better to show raw markdown than paraphrased HTML. **(2)** The c001 entry promised `md-content` styling in the shared `<style>` block but the actual CSS rules were never added during the v1.19 extraction. Adding them now: `.md-content` (h1/h2/h3/h4 hierarchy, paragraph spacing, ul/ol, code, links, hr, blockquote, target highlight) plus `.md-table` (GFM table styling consistent with the rest of the visual kit) plus new `.md-content pre.md-raw` (monospace fallback for the raw-markdown render). Two new Anti-pattern rows codify the rule: "Tab 2 sources from .html or wraps perf-audit content in CVR-RCA chrome" and "Sub-headings dropped during the perf-audit md→HTML conversion". Companion change in `cvr-rca/SKILL.md` c036 (Step 3 Tab framework rewritten to drop the `.html` byte-paste). Driven by CE 3593 RCA where Tab 2 was 31% smaller than the source `.md` due to perf-audit-skill's `.html` restructuring step. |
 | c003 | 2026-05-29 | Back-to-top floating arrow added. New `.back-to-top` CSS rule defines a fixed bottom-right circular button (40px, dark navy translucent background, subtle box-shadow, hover-brightens + lifts 2px). HTML pattern in Page skeleton: a single `<a href="#top" class="back-to-top" aria-label="Back to top">↑</a>` placed near the end of `<body>` after the `<footer>`. `<header>` gains `id="top"` as the anchor target. The existing `html { scroll-behavior: smooth; }` rule handles the smooth scroll without any JS. Hidden on print via `@media print { .back-to-top { display: none; } }`. Always visible (no scroll-detection JS) — kept minimal per "very small UX addition" framing. |
 | c002 | 2026-05-28 | Dashboards row chrome added to header CSS — `.dashboards`, `.dash-label`, `.dash-link` rules support an optional row of pill-button links to external dashboards scoped to the same entity as the report. Page skeleton example gains a placeholder `<div class="dashboards">` block inside `<header>`, with a comment noting the consuming skill's structure file owns the URL templates. Chrome only — URLs are skill-specific (CVR-RCA carries Omni + Sentra in its `report_structure.md` "Dashboards row" section). Companion change in `cvr-rca/references/report_structure.md` c032 (Omni + Sentra URL templates). |

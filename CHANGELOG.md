@@ -4,7 +4,45 @@ This file tracks every meaningful change pushed to this repository. Each entry c
 
 ---
 
-## [Unreleased] — v1.21 — Back-to-top floating arrow
+## [v1.22] — 2026-05-29 — Tab 2 sources from perf-audit `.md` verbatim (partial revert of v1.19's HTML embed)
+
+**Summary:** CVR-RCA's Tab 2 (Paid Performance Audit) reverts to verbatim markdown → HTML rendering of `perf_audit_report.md`. The v1.19 design had Tab 2 byte-paste from `perf_audit_report.html` — a polished HTML file the perf-audit-skill emits alongside its markdown. That design relied on perf-audit-skill's md→html step being faithful. In practice it isn't: perf-audit-skill restructures and summarizes during its own md→html conversion, collapsing h3/h4 subsections into parent h2 sections, dropping appendices, and adding CVR-RCA-style chrome (callouts, action cards) around its content. Result: CE 3593's Tab 2 was 31% smaller than the source `.md` (2,051 words vs 2,975), with sub-headings like `4a. Campaign roster, post-consolidation`, `5c. Money on table (sized)`, the Monthly Trajectory appendix, and the Data Sources section all collapsed or dropped.
+
+v1.22 fixes this at the source: Tab 2 reads `perf_audit_report.md` directly and converts markdown → HTML using the documented mapping in `visual_kit.md`. **Every section, every subsection, every table cell, every paragraph, every word is preserved.** No summarization, no restructuring, no CVR-RCA chrome wrapped around perf-audit content — the perf-audit-skill's own structure is the structure of Tab 2. `perf_audit_report.html` is explicitly ignored even if it exists; only the `.md` is canonical.
+
+A fallback rule covers the rare case where the markdown contains a construct the conversion mapping doesn't cover (e.g., the perf-audit-skill adds a new construct in a future version): embed the raw markdown text inside `<pre class="md-raw">`. Better to show raw markdown than paraphrased HTML — fidelity beats polish.
+
+The fix also caught a related drift: the `.md-content` and `.md-table` CSS rules were referenced by spec but never actually added to `visual_kit.md` during the v1.19 extraction. They're added now (along with the new `.md-content pre.md-raw` styling for the fallback).
+
+### Changes by file
+
+**`SKILL.md`** — c036
+- Step 3 "Tab framework — when to use it" rewritten. Source = `perf_audit_report.md`. Explicit instruction that `perf_audit_report.html` is ignored even if present. Fidelity rules made explicit. Fallback to `<pre class="md-raw">` documented.
+
+**`references/visual_kit.md`** — c004
+- "Perf-audit tab rendering" subsection rewritten as "Perf-audit tab rendering — markdown → HTML verbatim". Conversion mapping expanded (blockquotes, h4, fenced code, GFM tables, hr, inline links). Slug rule formalized for all heading levels including subsections (4a, 5c, etc.). Fallback rule documented.
+- Missing CSS finally added to the shared `<style>` block: `.md-content` (h1–h4 hierarchy, paragraphs, lists, code, links, hr, blockquote, `:target` highlight), `.md-table` (GFM styling consistent with the rest of the kit), and the new `.md-content pre.md-raw` (monospace fallback for raw markdown).
+- Two new Anti-pattern rows: Tab 2 sourcing from `.html` or wrapping perf-audit content in CVR-RCA chrome; sub-headings dropped during the conversion.
+
+**perf-audit-skill (local rollback, not in this repo)**
+- The local-only changes to perf-audit-skill that added Step 6 (Write HTML report), `references/visual_kit.md`, and `references/perf_audit_structure.md` are rolled back. perf-audit-skill returns to emitting `perf_audit_report.md` only. These changes were never pushed to the upstream perf-audit-skill GitHub repo, so the rollback is local-only.
+
+### What did not change
+
+- The perf-audit-skill's markdown output. `perf_audit_report.md` is unchanged and remains the canonical text artifact for both Claude's Step 2b reconciliation reasoning and CVR-RCA's Tab 2 display.
+- The tab framework itself (sticky bar, JS, anchor scheme `perfaudit-<slug>`). Tab 1 / Tab 2 layout unchanged.
+- The cross-tab citation routing table and four-pattern citation phrasings.
+- Single-tab / flat-spec reports (perf-audit didn't run / DATA GAP / Organic cascade) — no behavior change.
+
+### Why this design
+
+The v1.19 trust assumption — perf-audit-skill's `.html` would be a faithful conversion of its `.md` — turned out wrong. Once that's established, byte-pasting from `.html` becomes a fidelity hazard. The fix is structural: pin the source to `.md` (the canonical artifact), do the conversion at Tab 2 write-time (under CVR-RCA's control), enforce verbatim fidelity in the conversion rules. The small cost (Claude does the markdown→HTML conversion at every CVR-RCA report write) is worth the certainty that nothing gets paraphrased or dropped. The fallback rule (raw markdown if conversion can't handle something) is the safety net so the spec doesn't become rigid against future perf-audit-skill changes.
+
+---
+
+## [v1.21] — 2026-05-29 — Back-to-top floating arrow
+
+(Originally `[Unreleased]`; tagged retroactively as released since the commit `6bb01c0` was pushed to `origin/main` on the same day.)
 
 **Summary:** A small UX addition. Every report now carries a fixed circular ↑ button in the bottom-right corner; one click scrolls smoothly back to the top of the page. Always visible (no scroll-detection JS to fade in/out), uses the existing `scroll-behavior: smooth` CSS via an anchor link to `<header id="top">` — zero new JavaScript. Hidden on print. Lives entirely in `visual_kit.md` because the chrome is skill-agnostic; any future skill emitting an HTML report inherits it.
 
@@ -23,7 +61,7 @@ This file tracks every meaningful change pushed to this repository. Each entry c
 
 ---
 
-## [Unreleased] — v1.20 — Header dashboards row (Omni + Sentra)
+## [v1.20] — 2026-05-29 — Header dashboards row (Omni + Sentra)
 
 **Summary:** Every CVR-RCA report header now carries a `.dashboards` row with two pill-button links to external CE-scoped analytics dashboards — Omni Analytics and Sentra. Analysts can jump from the report into either dashboard in one click, with the CE filter pre-applied. The chrome (`.dashboards`, `.dash-label`, `.dash-link` CSS plus a placeholder block in the Page skeleton) lives in the shared `visual_kit.md` so any future skill emitting an HTML report can reuse the same pill style. The two specific URL templates (Omni dashboard ID + filter IDs; Sentra base URL) live in CVR-RCA's `report_structure.md` because they are CE-analytics knowledge, not generic chrome. Only the CE ID is substituted at write time — Omni's date params are constant (the dashboard has built-in pre/post comparison logic for last-30-days vs prior-30-days, independent of the RCA's actual pre/post windows); Sentra defaults to its own 30-day window with no URL date parameters available.
 
@@ -50,7 +88,7 @@ Analysts running an RCA almost always want to cross-reference the CE in Omni or 
 
 ---
 
-## [Unreleased] — v1.19 — Visual kit extraction + perf-audit HTML output + Tab 2 embed-from-HTML
+## [v1.19] — 2026-05-29 — Visual kit extraction + perf-audit HTML output + Tab 2 embed-from-HTML
 
 **Summary:** Generalize the report visual system so multiple skills can produce HTML reports in the same visual language without copy-paste drift. Extract skill-agnostic visual primitives (CSS, HTML patterns for metric cards / callouts / action cards / analysis blocks / tables / tab framework / ↗ link-to-table pattern / Slack integration / styling rules / Plotly conventions) from `references/report_structure.md` into a new shared file `references/visual_kit.md`. The remaining content in `report_structure.md` is CVR-RCA-specific structure (Section 1/2/3 macro layout, "What belongs in Section 3" table, CVR-RCA-specific block specs). Perf-audit gets a parallel `references/perf_audit_structure.md` that defines its own section layout on top of the same `visual_kit.md` (an identical copy lives in the perf-audit-skill repo). The perf-audit skill now emits both `perf_audit_report.md` (canonical text record, unchanged) AND `perf_audit_report.html` (NEW polished standalone HTML deliverable, self-contained with visual_kit CSS inlined). CVR-RCA's Step 3 Tab 2 rendering switches from "read markdown + render to HTML inline" to "read perf-audit's HTML, extract body content, paste verbatim" — a byte-paste rather than a comprehension step. Visual quality goes up (both tabs share `visual_kit.md` so they look visually identical); Claude's reading load goes down (no markdown→HTML conversion at Step 3); RCA quality is structurally insulated (perf-audit's investigation phase remains format-agnostic; the HTML render happens after all conclusions are reached). Markdown artifacts remain Claude's input for Step 2b reconciliation reasoning — verbose HTML never enters Claude's reasoning context.
 
@@ -88,7 +126,7 @@ The v1.18 architecture had perf-audit emit markdown only, and CVR-RCA rendered t
 
 ---
 
-## [Unreleased] — v1.18 — Bulleted shape for Section 1 callout
+## [v1.18] — 2026-05-29 — Bulleted shape for Section 1 callout
 
 **Summary:** Section 1 callout answers gain a second shape — lead claim + bullet list — for multi-mechanism findings. The existing paragraph form remains the default for single-mechanism findings; Claude picks the shape that matches the finding. No threshold rule, no word cap. New styling rule 7 makes the preference explicit ("prefer the bullet shape when a callout enumerates drivers"). The bullet form is documented in the Visual Spec with its own CSS and HTML pattern so it inherits the existing callout typography (15px dark text) and ↗ ref-link placement convention.
 
@@ -113,7 +151,7 @@ The most-scanned section of the report was becoming the hardest to scan when fin
 
 ---
 
-## [Unreleased] — v1.17 — Lazy-load references by phase
+## [v1.17] — 2026-05-29 — Lazy-load references by phase
 
 **Summary:** Claude no longer reads all four reference files upfront. Reading is deferred to the phase that needs the file: `context.md` + `hypothesis.md` at Step 2 (investigation), `actions.md` + `report_structure.md` at Step 3 (writing the report), `evals/evaluator.md` at Step 4. Step 1 reads only `SKILL.md`. Files are loaded **whole** when loaded — section-level reads are explicitly rejected because they would constrain the cross-pattern reasoning surface that produces non-obvious findings (cross-cuts, catalogue-change recognition, the connections between query templates and historical patterns). The change is about *when* to load, not *what* to load. A new "On reading references — a note on freedom" subsection in SKILL.md codifies the operating principle: Claude has complete freedom to form hypotheses, design queries, and follow the data wherever it leads; references are the shared context that makes that freedom precise rather than vague. `actions.md` is deliberately deferred to Step 3 so the Step 2b synthesis reaches the root cause without being biased toward existing action templates — novel root causes can produce novel actions, not just remixes of the library.
 
@@ -139,7 +177,7 @@ The original upfront-read instruction made sense when the skill was smaller, but
 
 ---
 
-## [Unreleased] — v1.16 — Retire spec-JSON + render.py pipeline; restore Claude-writes-HTML
+## [v1.16] — 2026-05-29 — Retire spec-JSON + render.py pipeline; restore Claude-writes-HTML
 
 **Summary:** v1.14 added a `report_spec.json` + `scripts/render.py` rendering pipeline to support a multi-tab deliverable (CVR-RCA + Paid Performance Audit). v1.15 added escape-hatch components (`analysis_block`, `raw_html`) and left-aligned the tab bar. Both releases solved a real tab problem but introduced a quality regression: render.py's 19 built-in component renderers (`metric_cards`, `mbho_channel_table`, `shapley_waterfall`, `dimension_table`, `experience_table`, `trend_chart`, `action_cards`, etc.) ship inline-styled HTML from pre-v1.13 — older visual idioms that look utilitarian next to the polished `.analysis-block` chrome the v1.15 template defined. When a report mixes built-ins with escape-hatch blocks, two visual eras of the skill end up side-by-side in one document. CE 252 (Louvre, May 27) was hand-authored before v1.14 shipped and remains the quality target; CE 243 (Eiffel Tower, May 28) was rendered through the pipeline and showed the visual drift. v1.16 retires the pipeline for CVR-RCA content and restores the v1.13-era Claude-writes-HTML workflow. The tab framework survives as a documented HTML pattern (tab bar + `.tab-pane` wrappers as a copy-pasteable block in `report_structure.md`); perf-audit markdown is rendered to HTML inline as part of writing the report, with content verbatim. Freedom of movement is total — no component dispatcher to constrain novel findings, no spec JSON to maintain, no rendering pipeline to debug.
 
