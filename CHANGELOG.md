@@ -4,6 +4,29 @@ This file tracks every meaningful change pushed to this repository. Each entry c
 
 ---
 
+## [v1.24] — 2026-06-03 — Orchestration handshake: run cleanly as a sub-skill of the CE-RCA master
+
+**Summary:** CVR-RCA can now be orchestrated by the new **CE-RCA master skill** (a separate repo that runs CE Health → CVR-RCA + perf-audit → one composite tabbed report) without firing perf-audit twice. A new master writes an `orchestration.json` file into the shared run directory listing which sub-skills it's pre-firing. CVR-RCA's perf-audit spawn block now checks that file: if `perf-audit-skill` is listed under `fired_by_master`, CVR-RCA skips its own perf-audit spawn and consumes the master's output at Step 2b check #10 instead. The existing wait-for-file polling at check #10 handles any timing race, so there's no new coordination machinery. **Standalone `/cvr-rca` runs are completely unchanged** — the orchestration file doesn't exist, so the normal fire-and-forget spawn happens exactly as before. This is the only change CVR-RCA needs to participate in the umbrella; its report, investigation logic, and visual output are otherwise identical to v1.23.
+
+### Changes by file
+
+**`SKILL.md`** — c038
+- The "Perf-audit context — fire and forget" spawn block gains a delegation-check preamble: read `<run_dir>/orchestration.json`; if `perf-audit-skill` is in `fired_by_master`, log the delegation and skip the spawn (consume at Step 2b). Belt-and-braces secondary check skips the spawn if `perf_audit_report.md` already exists. Falls through to normal spawn logic when neither file is present.
+- VERSION bumped to 1.24.0.
+
+### What did not change
+
+- Standalone `/cvr-rca` behavior — byte-identical to v1.23 (orchestration file absent → normal spawn).
+- The Step 2b check #10 reconciliation — same four-pattern routing, same polling, same citations.
+- The report, the tab framework, the visual kit, the investigation logic — all unchanged.
+- The perf-audit skill itself — unchanged.
+
+### Why this design
+
+The CE-RCA master needs CVR-RCA and perf-audit to run side-by-side under one run directory, but CVR-RCA already fires perf-audit on its own when the cascade goes Paid — naively, that means two perf-audit runs for the same CE. A file-existence race ("skip if the report exists") is fragile because CVR-RCA might check before the master's parallel perf-audit has finished writing. The `orchestration.json` handshake is race-free: it declares intent *before* anything is fired, so CVR-RCA knows to delegate regardless of timing, and the existing consume-time polling does the waiting. The mechanism is invisible to standalone runs and generalises to any future orchestrator.
+
+---
+
 ## [v1.23] — 2026-05-29 — Trim one-off `.html` guardrails from the Tab 2 spec
 
 **Summary:** Removes defensive language from the v1.22 spec that warned "if `perf_audit_report.html` exists, ignore it." That paragraph was added when perf-audit-skill had been emitting `.html` locally; once perf-audit-skill was rolled back to markdown-only output (also as part of the v1.22 change set), the warning became obsolete. Scalable skill instructions describe canonical behavior; one-off defensive negations against a failure mode that can't occur belong in commit messages and the changelog, not in the live spec. The canonical rule is unchanged: **Tab 2 reads `perf_audit_report.md` and converts markdown → HTML verbatim.**
