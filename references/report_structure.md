@@ -1,13 +1,13 @@
 # CVR-RCA Report Structure
 
-Read `visual_kit.md` first for CSS, HTML patterns, and styling rules. This file describes the **CVR-RCA-specific** report structure on top of those primitives: the fixed three-section macro-structure (Section 1/2/3), the "What belongs in Section 3" table, and the CVR-RCA-specific HTML patterns (Mix cascade analysis block, Fixed Segment banner, Geo / Non-Geo overview, Market context block, Shapley decomposition flex bar, URL-level breakdown, Inventory section format, Session recordings, Ruled-out dimensions, Hypotheses explored, Report length calibration).
+Read `visual_kit.md` first for CSS, HTML patterns, and styling rules. This file describes the **CVR-RCA-specific** report structure on top of those primitives: the fixed three-section macro-structure (Section 1/2/3), the "What belongs in Section 3" table, and the CVR-RCA-specific HTML patterns (Mix cascade analysis block, Fixed Segment banner, Geo / Non-Geo overview, External Signals block, Shapley decomposition flex bar, URL-level breakdown, Inventory section format, Session recordings, Ruled-out dimensions, Hypotheses explored, Report length calibration).
 
 **The principle:** By the time the GM finishes reading Section 2, they know exactly what happened and what to do. Section 3 is for anyone who needs to verify the conclusion. The analysis is not the report — the analysis is the evidence behind the report.
 
 **Pre-write sanity check.** Before writing HTML, verify three items that are the most-often-dropped spec elements regardless of which CE you're analysing:
 
 - **Header** carries the four meta spans — 📅 pre, 📅 post, 🌍 market, 🔗 landing-page URL (per Page Skeleton in `visual_kit.md`).
-- **Dashboards row** carries the Omni link (CE ID substituted) and the Sentra link (CE ID substituted) per "Header — CVR-RCA-specific extensions" below.
+- **Dashboards row** carries the Omni link (CE ID substituted) per "Header — CVR-RCA-specific extensions" below.
 - **↗ arrows** are present after every numeric or named-finding claim cluster in the Section 1 callout, and after each Section 2 action card's cause line (per "↗ link-to-table pattern" in `visual_kit.md`).
 
 These are universal to every CVR-RCA report. Other spec items (verdict lines, named TGIDs, source-table accuracy) are story-specific and handled in their respective sections.
@@ -18,9 +18,9 @@ These are universal to every CVR-RCA report. Other spec items (verdict lines, na
 
 The header chrome (eyebrow, h1, meta row, dashboards row container) is defined in `visual_kit.md → Page skeleton`. This section defines the CVR-RCA-specific content that fills the dashboards row.
 
-### Dashboards row — Omni + Sentra
+### Dashboards row — Omni
 
-Every CVR-RCA report header carries a `.dashboards` row beneath the meta line with two pill-button links scoped to the CE. The CSS chrome (`.dashboards`, `.dash-label`, `.dash-link`) lives in `visual_kit.md`; the URL templates are defined here.
+Every CVR-RCA report header carries a `.dashboards` row beneath the meta line with a pill-button link scoped to the CE. The CSS chrome (`.dashboards`, `.dash-label`, `.dash-link`) lives in `visual_kit.md`; the URL template is defined here.
 
 **Omni Analytics dashboard.** Filter to the CE ID. Date params are constant — the Omni dashboard has built-in pre/post comparison logic that compares the last 30 days against the previous 30 days, so we always pass `30 complete days ago` + `30 days` regardless of the RCA's actual pre/post windows.
 
@@ -32,27 +32,16 @@ https://headout.omniapp.co/dashboards/5368ab53?f--iv8lWOuS=%7B%22values%22%3A%5B
 
 Substitution: `<CE_ID>` → the CE ID as a string (e.g., `243`, `3593`). No other substitutions — date params and dashboard ID stay constant.
 
-**Sentra.** Filter to the CE ID. Sentra defaults to its own time window (last 30 days); the date range is not configurable via URL.
-
-URL template:
-
-```
-https://sentra-analytics.headout.com/analysis/<CE_ID>
-```
-
-Substitution: `<CE_ID>` → the CE ID.
-
 **HTML emitted in the report header** (replaces the placeholder `<div class="dashboards">` block shown in `visual_kit.md → Page skeleton`):
 
 ```html
 <div class="dashboards">
   <span class="dash-label">DASHBOARDS</span>
   <a href="[Omni URL with CE_ID substituted]" target="_blank" class="dash-link">Omni ↗</a>
-  <a href="[Sentra URL with CE_ID substituted]" target="_blank" class="dash-link">Sentra ↗</a>
 </div>
 ```
 
-Render both links on every CVR-RCA report — no conditional logic. If a future RCA targets a CE that doesn't have Omni or Sentra coverage, the links still resolve (the dashboards will just show empty state), which is acceptable.
+Render the Omni link on every CVR-RCA report — no conditional logic. If a future RCA targets a CE that doesn't have Omni coverage, the link still resolves (the dashboard will just show empty state), which is acceptable.
 
 ---
 
@@ -185,11 +174,11 @@ Include only analyses that directly support or rule out a claim made in Sections
 4. Daily trend chart (C2O / S2C / LP2S for the primary driver)
 5. Primary driver dimension cuts and experience/URL breakdowns (as applicable)
 6. Secondary driver evidence (if applicable — see SKILL.md c023 for scoping)
-6.5. **Market context & operational signals** (conditional — render when Slack returned ≥1 pattern B or C signal; see "Slack integration & link-to-table styling" above)
+6.5. **External signals & corroboration** (conditional — render when any external lens (Slack, perf-audit, CE Health, …) contributed a signal you used; see "External context integration & link-to-table styling" in visual_kit.md)
 7. Ruled-out dimensions block
 8. Hypotheses explored (always last)
 
-Conditional blocks (inventory, session recordings, price analysis, weekday composition) slot between items 5 and 6 within the relevant funnel step's evidence. The Market Context block sits *after* secondary driver evidence (item 6.5) so the data-driven story leads — external/Slack context is supporting evidence, not the primary lens.
+Conditional blocks (inventory, session recordings, price analysis, weekday composition) slot between items 5 and 6 within the relevant funnel step's evidence. The External Signals block sits *after* secondary driver evidence (item 6.5) so the data-driven story leads — external lenses are supporting evidence, not the primary lens.
 
 The list below covers most CEs. **When the investigation surfaces a finding that doesn't match any of the standard blocks, add a custom `.analysis-block` for it** — Claude writes the report in HTML directly, so there is no rendering-pipeline constraint on what can ship. The visual guardrails come from following the `.analysis-block` HTML pattern in the Visual Spec section (rounded card, title, optional verdict line, body content); the content inside the block is freeform.
 
@@ -209,7 +198,7 @@ The list below covers most CEs. **When the investigation surfaces a finding that
 | Price analysis | When price changed and timing correlates with LP2S onset. |
 | Session recordings | When recordings were pulled — present as a structured table (see below). |
 | Weekday composition | When pre vs post differs materially in weekday/weekend mix AND the report attributes any portion of the move to that imbalance. Render only when material — otherwise the check stays in the transcript. Two-row table: pre weekdays/weekends, post weekdays/weekends; subtext explains the implied calibration on the headline metric. |
-| Market context & operational signals | When Slack returned at least one pattern B (mechanism explanation) or C (reframing context) signal. Three-column table: Signal · What it tells us about this report · Source. See HTML pattern below. |
+| External signals & corroboration | When **any** external lens (Slack, perf-audit, CE Health, future siblings) contributed a signal you actually used (Pattern A/B/C in the Step 2b reconciliation). Three-column table: Signal · What it tells us about this report · Source ↗. One row per *used* signal, regardless of which lens it came from. Renders whenever at least one lens contributed a used signal — even if other lenses were unavailable. This is the report's "sources cited" panel. See HTML pattern below. |
 | Custom analysis block | When the investigation surfaced a finding that doesn't match any of the standard rows above but should still look visually consistent with the rest of Section 3. Write a `<div class="analysis-block">` with a `<div class="block-title">`, optional `<div class="verdict-line">`, and freeform body HTML inside. **Default home for novel findings.** |
 
 
@@ -828,44 +817,51 @@ For Uniform and Mix-dominant outcomes, omit the note and continue to Shapley.
 
 ---
 
-### Market context & operational signals block
+### External signals & corroboration block
 
-Render this block in Section 3 between item 6 (secondary driver evidence) and item 7 (Ruled-out dimensions) **only when Slack returned at least one pattern B (mechanism explanation) or C (reframing context) signal** (see "Slack integration & link-to-table styling" above). Skip the block entirely if Slack returned only pattern A corroborations or nothing useful — silence is fine.
+Render this block in Section 3 between item 6 (secondary driver evidence) and item 7 (Ruled-out dimensions) **whenever any external lens contributed at least one signal you actually used** (Pattern A/B/C in the Step 2b reconciliation) — from Slack, perf-audit, CE Health, or any future sibling. This is the report's **"sources cited" panel**: every external signal that informs a callout, verdict, or narrative line gets one row here, and is also woven in at the point of use. It is the table side of the provenance contract in `SKILL.md → Step 2b → "Context reconciliation (checks #9–#11)"`. Skip the block only when no external lens contributed any used signal — silence is fine then.
 
-Three-column table. Title is generic ("Market context & operational signals") — never bake the channel name (e.g., `#mkt-italy-switzerland-malta`) into the heading; let the Source column carry channel context.
+The id stays `block-market-context` so existing ↗ citations continue to resolve.
 
-The block is direction-agnostic: it works for declines (e.g., "supplier deploy explains the break on May 6", "bug alert correlates with the drop date") and for improvements (e.g., "MB assortment cap on May 7 concentrates traffic", "YoY GBV −20%, customers trading down").
+Source-agnostic three-column table. The heading is generic — never bake a specific channel/section name (e.g., `#mkt-italy-switzerland-malta`, `perf-audit §4`) into the title; let the **Source** column carry per-row provenance. Each Source cell names the lens and links to it: Slack → external thread URL `[Author · date]`; perf-audit / CE Health → an in-report `↗` to the owning tab anchor (`#perfaudit-<slug>`, `#cehealth-<slug>`) so the reader jumps to the source tab.
+
+The block is direction-agnostic (declines *and* improvements) and lens-agnostic: a row can be a Slack supplier-deploy thread, a perf-audit SIS verdict, or a CE Health Shapley/RPC fact — whatever you leaned on.
+
+When a lens that was expected (named in `orchestration.json` `context_lenses`) did **not** reach the report — e.g. Slack timed out or hit a permission denial — add a final disclosure row noting the gap (so the reader knows a lens is missing, not that it was clean). The block still renders for the lenses that *did* contribute; a single unavailable lens never suppresses the whole table.
 
 ```html
 <div class="analysis-block" id="block-market-context">
-  <div class="block-title">Market context &amp; operational signals</div>
-  <div class="verdict-line neutral">[One-line summary of what Slack adds — corroboration, reframing, or mechanism explanation. Direction-agnostic.]</div>
+  <div class="block-title">External signals &amp; corroboration</div>
+  <div class="verdict-line neutral">[One-line summary of what the external lenses add in aggregate — corroboration, reframing, or mechanism explanation across Slack / perf-audit / CE Health. Direction-agnostic.]</div>
 
   <table>
     <thead>
       <tr>
         <th>Signal</th>
         <th>What it tells us about this report</th>
-        <th style="width:140px;">Source</th>
+        <th style="width:160px;">Source</th>
       </tr>
     </thead>
     <tbody>
       <tr>
-        <td>[Slack thread compressed to one sentence in plain language — preserve Headout-native jargon per Styling rule 5]</td>
-        <td>[The connection — corroborates which finding, reframes which interpretation, or explains which mechanism. This is the only column requiring Claude's commitment.]</td>
-        <td><a href="[slack-thread-url]" target="_blank" style="color:#3a4a8a;font-size:12px;">[Author · date]</a></td>
+        <td>[The signal compressed to one sentence in plain language — preserve Headout-native jargon per Styling rule 5]</td>
+        <td>[The connection — which finding it corroborates, which interpretation it reframes, or which mechanism it explains. The only column requiring Claude's commitment.]</td>
+        <td><!-- Slack: external thread link -->
+          <a href="[slack-thread-url]" target="_blank" style="color:#3a4a8a;font-size:12px;">Slack: [Author · date]</a>
+          <!-- OR perf-audit / CE Health: in-report cross-tab link -->
+          <!-- <a class="ref-link" href="#perfaudit-paid-deep-dive">perf-audit §4 ↗</a> -->
+          <!-- <a class="ref-link" href="#cehealth-driver-diagnosis-shapley">CE Health ↗</a> -->
+        </td>
       </tr>
-      <!-- repeat one row per signal worth showing (typically 3–7 rows) -->
+      <!-- one row per USED signal across all lenses (typically 3–8 rows) -->
+      <!-- final row only if an expected lens was unavailable: -->
+      <!-- <tr><td colspan="3" style="color:#777;font-size:12px;font-style:italic;">Slack context not retrievable this run (connector timeout) — operational lens not included.</td></tr> -->
     </tbody>
   </table>
-
-  <p style="font-size:13px;color:#555;margin-top:12px;">
-    [Optional brief subtext if there are bug/operational threads not material to the headline but worth flagging to Ops — keep to one sentence.]
-  </p>
 </div>
 ```
 
-Layer 1 and Layer 2 ↗ arrows that cite Slack sources all route to this block via `href="#block-market-context"`. The Source column's hyperlinks are external (to the Slack thread itself).
+Layer 1 and Layer 2 ↗ arrows that cite any external source route to this block via `href="#block-market-context"` (for the consolidated view) or directly to the owning tab anchor (for cross-tab jumps). Slack Source cells link externally to the thread; perf-audit / CE Health Source cells link in-report to their tab anchors.
 
 ---
 

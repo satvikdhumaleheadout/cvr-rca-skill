@@ -801,6 +801,29 @@ CE Health). They share one model and one hard rule.
 - **Scalable by design.** A future lens (e.g., an AOV-RCA sibling) is one more
   manifest entry reconciled with the same model — not a new mechanism. Checks
   #9–#11 below are the per-lens specifics for the three lenses that exist today.
+- **Reconcile widest-first, then synthesise together.** Read the lens that can
+  most change your interpretation first: **CE Health (widest, upstream — can
+  reframe the whole finding) → perf-audit (paid-side mechanism) → Slack
+  (operational colour).** This is a reading-order hint, not a rail — the point is
+  that a reframe from the widest lens (e.g. CE Health says the headline mover was
+  AOV, not CVR) should land *before* you polish narrative the wider lens would
+  demote. Then reconcile the lenses *together*, not in isolation: a signal two
+  lenses agree on is stronger (raise confidence, no new query); a Pattern D gap
+  flagged by two lenses is a priority test (still one query max).
+- **Provenance contract — this governs the report, not the investigation.** You
+  explored however an analyst would; this rule is purely about *attribution* of
+  what you ended up using. **Any external signal that informs a callout, verdict,
+  or narrative line must appear in two places: (a) woven in at the point of use,
+  and (b) as one row in the Section 3 External Signals & Corroboration table
+  (`block-market-context`), with a Source ↗ to the owning tab or thread.** This
+  applies to every used signal regardless of pattern — a Pattern A corroboration
+  is still a used signal and still earns a row. The table is the report's
+  "sources cited": it renders whenever *any* lens contributed a used signal, even
+  if other lenses were unavailable (a missing lens becomes a disclosure row, it
+  does not suppress the table). If you didn't use a signal, leave it out — the
+  table is exactly what you leaned on, nothing more. See `report_structure.md →
+  "External signals & corroboration block"` for the HTML and
+  `visual_kit.md → "External context integration"` for the four-pattern surfacing.
 
 9. **Slack context reconciliation** — read `<run_dir>/slack_context.md`. If the
    file does not exist yet, wait briefly (the sub-agent may still be running);
@@ -828,7 +851,7 @@ CE Health). They share one model and one hard rule.
    supplier API migration, a TGID launch) that explains a finding the
    investigation reached without naming the *why*. Route into Layer 1 narrative
    weaving in the relevant callout/verdict subtext AND surface as a row in the
-   Section 3 Market Context block. No second query needed if the data-driven
+   Section 3 External Signals block. No second query needed if the data-driven
    finding already exists.
 
    **Pattern C — Reframing context.** The signal introduces a metric or
@@ -836,7 +859,7 @@ CE Health). They share one model and one hard rule.
    demand shift) and would cause a stakeholder to act or prioritise differently.
    Route to a Layer 2 Important Context callout-item in Section 1 (high bar —
    apply the four decision-changing tests in `report_structure.md`) AND a row
-   in the Section 3 Market Context block. Phrasing the citation correctly (how
+   in the Section 3 External Signals block. Phrasing the citation correctly (how
    to name the differing timeframe in the same sentence, what counts as a
    silent timeframe switch) is a styling concern, not a process step — see
    `report_structure.md → "Timeframe-citation rule"`.
@@ -893,7 +916,9 @@ CE Health). They share one model and one hard rule.
     cuts located the LP2S drop on a specific URL set, and perf-audit reports
     `Assessment: IMPROVED` — high confidence the drop is page-driven, not
     traffic-driven. Note the corroboration in the leaf's evidence line and in
-    the Section 3 verdict subtext.
+    the Section 3 verdict subtext — **and add a row to the External Signals
+    table** per the provenance contract (a used corroboration is still a used
+    signal; this is exactly the case that was silently dropping out before).
 
     **Pattern B — Mechanism explanation.** Perf-audit names a specific
     campaign-level event (a campaign paused on a date, tROAS self-suppression,
@@ -901,7 +926,7 @@ CE Health). They share one model and one hard rule.
     way it does. Common with routing-exit triggers — CVR-RCA timed the mix
     shift, perf-audit names the campaign that caused it. Weave into Layer 1
     narrative in the relevant callout subtext and surface as a row in the
-    Section 3 Market Context block. No second query needed.
+    Section 3 External Signals block. No second query needed.
 
     **Pattern C — Reframing context.** Perf-audit reports `Assessment:
     DEGRADED` while the CVR-RCA leaf is page/product-side. Both can be true,
@@ -1060,6 +1085,44 @@ perf-audit ↗)`, `(perf-audit named: <event · date> ↗)`, etc.) are documente
 in `report_structure.md → "Tabbed report structure → Citation routing"`. Step
 2b check #10 produces the citations; this step (Step 3) renders them inline.
 
+**Required-elements check before you finish (output contract, not process).**
+After writing `report.html`, verify the always-on elements are actually present
+**and rendered** — a placeholder `<div>` with no matching render script is the
+most common silent failure (it leaves an empty gap where a chart should be). For
+each always-on element, confirm both the container *and*, for charts, the
+`Plotly.newPlot('<id>', …)` call exist:
+
+- Five metric cards (CVR · LP2S · S2C · C2O · Traffic)
+- **90-day CVR + LY trend chart** — `<div id="trend-90day">` **and**
+  `Plotly.newPlot('trend-90day', …)`. This is the one most often dropped because
+  it requires pulling the LY series out of `trend_context.series` and applying
+  the LY-data guard (see `visual_kit.md → "90-day + LY overlay chart"`). If LY is
+  genuinely absent, the chart still renders current-year-only with the amber
+  "no LY overlay" badge — the chart is never omitted.
+- Root-cause callout (Section 1c)
+- Mix cascade block, Shapley flex bar, daily trend chart for the primary step
+- Hypotheses explored block (always last)
+- External Signals & Corroboration block — present whenever any external lens
+  contributed a used signal (per the Step 2b provenance contract)
+
+This is a completeness contract on the finished artifact — it does not constrain
+*what* you investigate, only that the report you ship contains what it must.
+
+**Run the advisory linter to check this automatically:**
+
+```bash
+python3 "$SKILL_DIR/scripts/validate.py" --report "<run_dir>/report.html" --run-dir "<run_dir>"
+```
+
+It runs **only here, after the report is written** — it never sees the
+investigation and has no bearing on how you explored. It prints any missing or
+orphaned elements (most importantly a chart container with no matching
+`Plotly.newPlot` call, which renders as an empty gap). It **never edits the
+report and never blocks** (exit code is always 0). For each finding, use your
+judgment: add the element, or consciously skip it with a one-line reason — a
+report can legitimately omit something, and the linter has no veto. It's a quick
+cosmetic pass; resolve the findings, then finalize.
+
 For a concrete walkthrough of how an investigation unfolds end-to-end, see
 `references/worked_example.md`.
 
@@ -1189,6 +1252,8 @@ not generic "investigate further" text.
 | c030 | 2026-05-22 | Perf-audit companion-skill integration. When the cascade fixes on Paid (conversion path at L2/L3, or routing exit at L2/L3), spawn the perf-audit sub-agent at the end of the cascade and continue immediately — mirrors the Slack fire-and-forget pattern. Sub-agent runs the standalone perf-audit skill ([aaradhyaraiHO/perf-audit-skill](https://github.com/aaradhyaraiHO/perf-audit-skill)) with the CE name and pre/post date windows; returns a structured summary at `<run_dir>/perf_audit_summary.md` and the full report at `<run_dir>/perf_audit_report.md`. Summary shape: overall verdict, traffic-quality assessment (SIS/CPC/Paid CVR trends), campaign status (pauses, tROAS suppression, budget exhaustion), one-sentence key finding, optional surprise hypothesis. Funnel data deliberately excluded from the summary — perf-audit's attribution differs from Mixpanel's, and CVR-RCA owns the funnel numbers. Step 2b gains check #10 (Perf-audit reconciliation): same four-pattern routing as Slack — Pattern A corroborates a leaf, B names the campaign-level *why*, C reframes the root cause when traffic quality degraded alongside a page finding, D tests a surprise hypothesis with one query max. Path resolution: `$PERF_AUDIT_SKILL_PATH` env var → `~/.perf-audit-skill/SKILL.md` (companion install) → sibling directory → legacy `~/Documents/perf-audit-skill/`. If none resolve, log "Perf-audit skill not installed — skipped" and continue. hypothesis.md LP2S and Mix sections gain background-context pointers explaining that the perf-audit verdict folds in at Step 2b, never during dimension-cut phase. INSTALL.md Step 6 adds an optional companion install. Perf-audit is consulted *only* at Step 2b — the data-driven branches must reach their own leaves before the perf-audit verdict is read, so it corroborates or surprises a completed picture rather than steering branch selection. |
 | c037 | 2026-05-29 | **Trimmed the "ignore `perf_audit_report.html`" defensive paragraph from Step 3.** The instruction was a one-off guardrail added in c036 (when perf-audit-skill had been emitting `.html` locally) but became obsolete once perf-audit-skill was rolled back to emitting markdown only. Carrying a defensive negation against a failure mode that can't occur is over-specification — it pollutes the spec with a CVR-RCA-vs-perf-audit-skill negotiation that future maintainers shouldn't need to understand. The canonical rule remains: "Tab 2 reads `perf_audit_report.md` and converts verbatim." Skill instructions should describe canonical behavior, not enumerate every potential failure mode. Companion change in `visual_kit.md` c005. |
 | c038 | 2026-06-03 | **Orchestration-handshake delegation check in the perf-audit spawn block** — enables CVR-RCA to run as a sub-skill of the new CE-RCA master skill without double-firing perf-audit. Before deciding to spawn the perf-audit sub-agent, CVR-RCA now checks for `<run_dir>/orchestration.json`; if `perf-audit-skill` appears in its `fired_by_master` array, a parent orchestrator is already running perf-audit against the same run directory, so CVR-RCA logs the delegation and skips its own spawn — then consumes the shared `perf_audit_report.md` at Step 2b check #10 as usual (the existing wait-for-file polling handles any timing race). Belt-and-braces secondary check: skip the spawn if `perf_audit_report.md` already exists even without an orchestration file. Standalone `/cvr-rca` runs are unchanged — neither file exists, so the normal spawn fires. This is the only CVR-RCA change required by the CE-RCA umbrella skill (which lives in its own repo and orchestrates CE Health → CVR-RCA + perf-audit → composite tabbed report). Sub-skill outputs remain verbatim; CVR-RCA's report and behavior are otherwise untouched. |
+| c041 | 2026-06-03 | **Sentra dashboard link deprecated.** Sentra is being retired, so the report header's dashboards row no longer creates a Sentra pill — Omni only. `report_structure.md → "Header — CVR-RCA-specific extensions"`: section retitled "Dashboards row — Omni + Sentra" → "Dashboards row — Omni"; the Sentra URL template, the Sentra `<a>` in the emitted HTML, and the pre-write sanity-check "Sentra link" mention all removed; the "render both links" instruction reduced to the Omni link. `visual_kit.md` Page-skeleton doc-comment updated to point at the renamed section. Historical changelog entries that reference Sentra (c032, visual_kit c002) are left intact — history is not rewritten. No code change; standalone and composite headers both render the Omni pill only. Companion ce-rca change: v1.1.2 (same Sentra trim in the master's meta.json instruction + composition docs). |
+| c040 | 2026-06-03 | **Provenance contract — source-agnostic External Signals table + required-elements check.** Two output-contract fixes (neither constrains the investigation; both govern what the finished report must contain). **(1) External Signals & Corroboration table.** The Section 3 "Market context & operational signals" block (Slack-only, rendered only when Slack returned a Pattern B/C signal) is generalised into a source-agnostic **"External signals & corroboration"** block that renders whenever **any** external lens (Slack, perf-audit, CE Health, future siblings) contributed a signal you *used* — one row per used signal, with a Source ↗ to the owning tab/thread. The Step 2b checks #9–#11 preamble gains a **provenance contract**: any external signal that informs a callout/verdict/narrative line must appear both woven in at the point of use *and* as a table row; this applies to every used signal regardless of pattern — **Pattern A corroborations now also earn a row** (check #10 Pattern A was previously inline-only, which is exactly why perf-audit signals silently dropped out of the table when Slack was unavailable, e.g. CE 243). A missing/unavailable lens becomes a disclosure row, never suppresses the table. Block keeps id `block-market-context` so existing ↗ citations resolve. Companion change `visual_kit.md` c007 (section renamed "Slack integration" → "External context integration & link-to-table styling", lens-agnostic; four-pattern surfacing table updated so A/B/C all earn a row). Added a **widest-first reading hint** to the preamble (CE Health → perf-audit → Slack, then synthesise together — a reading-order hint, not a rail). **(2) Required-elements check.** Step 3 gains a completeness contract: after writing the report, confirm always-on elements are present *and rendered* — most importantly the 90-day LY trend chart needs both `<div id="trend-90day">` and its `Plotly.newPlot('trend-90day', …)` script (the script was dropped in the CE 243 run, leaving an empty gap). Output contract only — fix before finishing. Backed by a new **advisory linter** `scripts/validate.py`, run at the end of Step 3: it flags missing/orphaned elements (e.g. a chart container with no `Plotly.newPlot` call — the exact 90-day failure mode, caught generically rather than by an enumerated list) and the absence of an External Signals table when external lenses were used. Cosmetic and advisory — runs only after the report is written, never edits, never blocks (exit 0 always); Claude adds or consciously skips each finding. Zero effect on investigation freedom. |
 | c039 | 2026-06-03 | **Manifest-driven context layer + CE Health as a new reconciliation lens.** Step 2b's per-lens reconciliation checks (#9 Slack, #10 perf-audit) are reframed under a shared "Context reconciliation — read every available lens" preamble: read the authoritative lens list from `<run_dir>/orchestration.json` `context_lenses` when present (master-orchestrated), else fall back to file-presence detection (standalone). One four-pattern model (A/B/C/D/Reject) applied per lens; lenses consulted ONLY at Step 2b, never during L0/L1/L2. New check #11 — **CE Health reconciliation**: when `ce_health_report.md` is present (CE-RCA umbrella ran CE Health first), reconcile funnel findings against the wide upstream lens. Two highest-value reconciliations: (A) entity-level cross-link — when a funnel drop is localized to an experience/TGID, corroborate against CE Health's revenue/RPC flag for that same entity (`CE Health: TGID 7148 RPC −30% ↗`); (C) headline-driver reframe — if CE Health's Shapley names AOV/Completion/Take Rate (factors CVR-RCA doesn't investigate) as the headline mover, say the funnel finding is real but not the headline and point to the CE Health tab. Cross-tab citations use `#cehealth-<slug>` anchors; standalone-safe (no CE Health present → no citation emitted). Scalable: a future sibling lens is one more manifest entry, same model. Companion change in `visual_kit.md` c006 (registers `summary-*` + `cehealth-*` anchor prefixes and the CE Health citation form). This is the CVR-RCA side of the cross-skill RCA work; the Summary synthesis tab and the orchestration manifest live in the CE-RCA repo. |
 | c036 | 2026-05-29 | **Step 3 Tab 2 reverts to verbatim markdown render — partially undoes c035.** Tab 2 now reads `<run_dir>/perf_audit_report.md` (canonical text artifact) and converts markdown → HTML verbatim using the conversion mapping in `visual_kit.md → "Perf-audit tab rendering"`. **`perf_audit_report.html` is explicitly ignored** even if present — the perf-audit-skill's own md→html step may restructure or summarize content (h3/h4 subsections collapsed into parent h2, appendices dropped) and CVR-RCA can't trust that derivative. Fidelity rules added: every section, every subsection (4a, 4b, 5a, 5b, 5c, Appendix, Data Sources), every table cell, every paragraph preserved verbatim. No CVR-RCA chrome wrapped around perf-audit content — the perf-audit's structure is the perf-audit's structure. New fallback rule: if the markdown contains a construct the conversion mapping doesn't cover, embed raw markdown text inside `<pre class="md-raw">`. Companion changes in `visual_kit.md` c004 (Perf-audit tab rendering rewritten; missing `.md-content` and `.md-table` CSS finally added; new `.md-raw` styling; two new Anti-patterns). Driven by CE 3593 RCA where Tab 2 was 31% smaller than the source `.md` (2,051 words vs 2,975) due to perf-audit-skill's html restructuring. perf-audit-skill local Step 6 (added in c035 era) rolled back; perf-audit-skill returns to emitting `.md` only. |
 | c035 | 2026-05-29 | **Step 3 Tab 2 rendering switches to HTML embed.** When perf-audit ran successfully, CVR-RCA's Tab 2 now reads `<run_dir>/perf_audit_report.html` (the polished HTML deliverable that perf-audit emits as a sibling of its markdown report), extracts the body content (everything between `<body>` and `</body>`, stripping any `<header>` inside), and pastes verbatim into `<div class="tab-pane" id="tab-perfaudit">`. Byte-paste, not comprehension — the HTML carries its own `perfaudit-<slug>` anchor IDs, headings, and chrome from the shared `visual_kit.md` both skills now reference. Fallback for older perf-audit versions (only emits markdown): legacy v1.16 inline md→HTML render. Companion changes in `report_structure.md` c031 (split into `visual_kit.md` + this file — primitives extracted), new `references/visual_kit.md` (shared design system), perf-audit-skill `perf_audit_structure.md` (new file defines perf-audit's section layout on top of visual_kit), perf-audit-skill SKILL.md (new Step 6 emits HTML alongside markdown). Visual quality goes up (embedded perf-audit content inherits CVR-RCA's visual_kit CSS, so it looks visually identical to surrounding Tab 1 content); Claude's reading load goes down (no markdown→HTML conversion at Step 3 — that work now happens once inside perf-audit, not on every CVR-RCA report write). Markdown artifacts (`perf_audit_summary.md`, `perf_audit_report.md`) unchanged — they remain Claude's input for Step 2b reconciliation reasoning. HTML is a presentation artifact, opaque to Claude at the embed step. |
