@@ -4,6 +4,29 @@ This file tracks every meaningful change pushed to this repository. Each entry c
 
 ---
 
+## [v1.27] — 2026-06-03 — User context as a steering input
+
+**Summary:** CVR-RCA can now take the analyst's own knowledge into the investigation. When `<run_dir>/user_context.md` is present — captured by the CE-RCA umbrella's Step 1 pause (focus / hunch / known event), or hand-placed in a standalone run — CVR-RCA consumes it at **two points**: at **L0** the priors become *prioritised, falsifiable* branches (opened early, tested, can be ruled out), and at **Step 2b** each prior is closed and corroborated against the data-driven findings. This is what lets a human say "look at LP2S at the landing-page level, I think it's broken there" and have that genuinely shape the hypotheses Claude opens — without the RCA losing its independence.
+
+**The balance (the whole point).** User context is powerful but must not distort the RCA. Five guardrails are baked into the skill text: **(1) priority, not tunnel-vision** — priors are appended to the data-driven default branch set, never a replacement; the mix/shapley/trend orientation still determines the primary driver. **(2) corroboration, not confirmation** — at Step 2b a prior is reconciled with the four-pattern model and can be RULED OUT; it carries no special authority. **(3) not narrow** — the full investigation still runs; the leaf is wherever the data lands, even if that's not where the user pointed. **(4) proportional output** — a confirmed prior is woven into the relevant finding; a ruled-out one is a single line; the report leads with the data-driven driver. **(5) always closed, never ignored** — every prior is resolved CONFIRMED / RULED OUT / DATA GAP via the existing close-every-quantified-signal discipline.
+
+**Why user context may steer L0 when Slack / perf-audit / CE Health may not.** Those are *lenses* — secondhand evidence held to Step 2b so they can't bias branch selection. User context is the analyst's *intent*, which legitimately directs where to look — so it is the one deliberate exception, read at L0. The falsifiability guardrail keeps it honest: the data still decides.
+
+### Changes by file
+
+- **`SKILL.md`** (c042) — L0 gains "Signal 0 — user context" (priors → prioritised falsifiable branches + the lens-exception carve-out + the not-narrow rule). Step 2b gains check #12 (close every prior + four-pattern corroboration + proportional-output rule). Preamble updated to #9–#12 with the user-context-is-not-a-lens note. VERSION → 1.27.0.
+
+### What did not change
+
+- The investigation engine (cascade, L1/L2+, the four-pattern model), and the other lenses' reconciliation — unchanged. Signal 0 is additive.
+- Standalone `/cvr-rca` with no `user_context.md` → byte-identical to v1.26.
+
+### Paired change in CE-RCA (separate repo)
+
+- ce-rca v1.2.0 (m005): the Step 1 pause captures the optional free-text context into a structured `user_context.md` and adds a `user_context` pointer to `orchestration.json`. v1 is free-text only; files / Google Sheets / Slack channels are a deferred v2 slot.
+
+---
+
 ## [v1.26] — 2026-06-03 — Provenance contract + Sentra deprecation
 
 **Summary:** Two reliability fixes, both **output contracts** (they govern what the finished report must contain, never how the investigation runs — so the skill keeps its analyst freedom). **(1) Source attribution made deterministic.** Previously, signals from external lenses (Slack, perf-audit, CE Health) only reliably showed up as a *table* when **Slack** returned a mechanism/reframing signal — the "Market context" block was Slack-gated. So when Slack was unavailable (e.g. CE 243, where the connector timed out) and perf-audit merely *confirmed* the finding (a "Pattern A" corroboration, which was wired inline-only), the perf-audit signals dropped out of any table and survived only as two buried inline citations. v1.26 generalises the block into a source-agnostic **"External Signals & Corroboration"** table that renders whenever *any* lens contributed a signal you used — one row per used signal, each with a Source ↗ link to the owning tab or thread. The governing rule is a one-paragraph **provenance contract**: any external signal that informs a callout, verdict, or narrative line must appear in two places — woven in at the point of use **and** as a table row — regardless of whether it corroborated, explained, or reframed. A missing lens becomes a disclosure row, never suppresses the table. Net effect: the reader can always see, at a glance, every outside source the analysis leaned on, and absence of a row now reliably means "wasn't used" rather than "Claude forgot." **(2) The 90-day trend chart can't silently vanish.** The CE 243 report shipped with the always-on 90-day LY trend chart's container but no render script — an empty gap. Step 3 gains a required-elements completeness check backed by a new **advisory linter** (`scripts/validate.py`): after the report is written, it flags any chart container missing its `Plotly.newPlot` call (caught generically — any orphaned chart, not an enumerated list) plus missing always-on elements and a missing External Signals table when external lenses were used. It is cosmetic and advisory by design — it runs only at the end, never sees the investigation, never edits the report, and never blocks (exit 0 always); Claude adds each flagged element or consciously skips it. So the skill's analyst freedom is fully preserved while silent structural gaps (like the CE 243 empty chart) get caught before the report ships.

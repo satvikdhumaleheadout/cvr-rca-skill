@@ -7,7 +7,7 @@ Read `visual_kit.md` first for CSS, HTML patterns, and styling rules. This file 
 **Pre-write sanity check.** Before writing HTML, verify three items that are the most-often-dropped spec elements regardless of which CE you're analysing:
 
 - **Header** carries the four meta spans — 📅 pre, 📅 post, 🌍 market, 🔗 landing-page URL (per Page Skeleton in `visual_kit.md`).
-- **Dashboards row** carries the Omni link (CE ID substituted) per "Header — CVR-RCA-specific extensions" below.
+- **Dashboards row** carries the Omni link (CE ID always substituted; the analysis dates are substituted too when the RCA used a custom window) per "Header — CVR-RCA-specific extensions" below.
 - **↗ arrows** are present after every numeric or named-finding claim cluster in the Section 1 callout, and after each Section 2 action card's cause line (per "↗ link-to-table pattern" in `visual_kit.md`).
 
 These are universal to every CVR-RCA report. Other spec items (verdict lines, named TGIDs, source-table accuracy) are story-specific and handled in their respective sections.
@@ -22,15 +22,46 @@ The header chrome (eyebrow, h1, meta row, dashboards row container) is defined i
 
 Every CVR-RCA report header carries a `.dashboards` row beneath the meta line with a pill-button link scoped to the CE. The CSS chrome (`.dashboards`, `.dash-label`, `.dash-link`) lives in `visual_kit.md`; the URL template is defined here.
 
-**Omni Analytics dashboard.** Filter to the CE ID. Date params are constant — the Omni dashboard has built-in pre/post comparison logic that compares the last 30 days against the previous 30 days, so we always pass `30 complete days ago` + `30 days` regardless of the RCA's actual pre/post windows.
+**Omni Analytics dashboard.** The URL carries two filters: a CE filter
+(`f--iv8lWOuS`) and a date filter (`f--uvd3KWWJ`). Always substitute the CE ID.
+The date filter depends on whether the RCA used the **default** window or a
+**custom** one:
 
-URL template (URL-encoded — copy verbatim; only substitute `<CE_ID>`):
+- **Default window** (the user did not pass a date range — the run defaulted to
+  last 30 vs prior 30 days): use Omni's **relative** date params
+  (`30 complete days ago` / `30 days`). This lets the Omni dashboard apply its own
+  built-in last-30-vs-prior-30 comparison — the link tracks "now" rather than
+  pinning to the RCA's computed dates.
+- **Custom window** (the user passed a specific date range): pass the RCA's
+  **post (analysis) window** as an absolute `BETWEEN` filter, so the Omni link
+  shows exactly the period the RCA is about.
+
+**Default-window URL** (URL-encoded — copy verbatim; only substitute `<CE_ID>`):
 
 ```
 https://headout.omniapp.co/dashboards/5368ab53?f--iv8lWOuS=%7B%22values%22%3A%5B%22<CE_ID>%22%5D%7D&f--uvd3KWWJ=%7B%22left_side%22%3A%2230+complete+days+ago%22%2C%22right_side%22%3A%2230+days%22%7D
 ```
 
-Substitution: `<CE_ID>` → the CE ID as a string (e.g., `243`, `3593`). No other substitutions — date params and dashboard ID stay constant.
+**Custom-window URL** (URL-encoded; substitute `<CE_ID>`, `<POST_START>`,
+`<POST_END_EXCLUSIVE>`):
+
+```
+https://headout.omniapp.co/dashboards/5368ab53?f--iv8lWOuS=%7B%22values%22%3A%5B%22<CE_ID>%22%5D%7D&f--uvd3KWWJ=%7B%22kind%22%3A%22BETWEEN%22%2C%22left_side%22%3A%22<POST_START>%22%2C%22right_side%22%3A%22<POST_END_EXCLUSIVE>%22%2C%22ui_type%22%3A%22BETWEEN%22%2C%22offset_interval_string%22%3Anull%7D
+```
+
+Substitutions:
+- `<CE_ID>` → the CE ID as a string (e.g., `243`, `3593`).
+- `<POST_START>` → the post-window start date, `YYYY-MM-DD` (e.g., `2026-06-02`).
+- `<POST_END_EXCLUSIVE>` → the post-window end date **plus one day**, `YYYY-MM-DD`.
+  Omni's `BETWEEN` upper bound is **exclusive**: a window of 2–12 Jun 2026 is
+  encoded as `left_side=2026-06-02`, `right_side=2026-06-13`. So compute
+  `right_side = post_end + 1 day`. (The decoded date filter is
+  `{"kind":"BETWEEN","left_side":"<POST_START>","right_side":"<POST_END_EXCLUSIVE>","ui_type":"BETWEEN","offset_interval_string":null}`.)
+
+The dashboard ID (`5368ab53`) and the two filter keys (`f--iv8lWOuS`,
+`f--uvd3KWWJ`) are constant. Use the post window (not the pre window, and not the
+full pre→post span) — the Omni dashboard runs its own prior-period comparison off
+whatever window it's given, mirroring the default last-30-vs-prior-30 behavior.
 
 **HTML emitted in the report header** (replaces the placeholder `<div class="dashboards">` block shown in `visual_kit.md → Page skeleton`):
 
@@ -41,7 +72,7 @@ Substitution: `<CE_ID>` → the CE ID as a string (e.g., `243`, `3593`). No othe
 </div>
 ```
 
-Render the Omni link on every CVR-RCA report — no conditional logic. If a future RCA targets a CE that doesn't have Omni coverage, the link still resolves (the dashboard will just show empty state), which is acceptable.
+Render the Omni link on every CVR-RCA report — the row itself is unconditional. The only branch is *which* date filter goes in the URL (default relative vs custom `BETWEEN`, per the two templates above). If a future RCA targets a CE that doesn't have Omni coverage, the link still resolves (the dashboard will just show empty state), which is acceptable.
 
 ---
 
@@ -200,6 +231,8 @@ The list below covers most CEs. **When the investigation surfaces a finding that
 | Weekday composition | When pre vs post differs materially in weekday/weekend mix AND the report attributes any portion of the move to that imbalance. Render only when material — otherwise the check stays in the transcript. Two-row table: pre weekdays/weekends, post weekdays/weekends; subtext explains the implied calibration on the headline metric. |
 | External signals & corroboration | When **any** external lens (Slack, perf-audit, CE Health, future siblings) contributed a signal you actually used (Pattern A/B/C in the Step 2b reconciliation). Three-column table: Signal · What it tells us about this report · Source ↗. One row per *used* signal, regardless of which lens it came from. Renders whenever at least one lens contributed a used signal — even if other lenses were unavailable. This is the report's "sources cited" panel. See HTML pattern below. |
 | Custom analysis block | When the investigation surfaced a finding that doesn't match any of the standard rows above but should still look visually consistent with the rest of Section 3. Write a `<div class="analysis-block">` with a `<div class="block-title">`, optional `<div class="verdict-line">`, and freeform body HTML inside. **Default home for novel findings.** |
+
+**User-context findings get no block of their own — they ride existing surfaces, proportionally.** A user prior (from `user_context.md`, closed at Step 2b check #12) that the data **confirmed** is woven into the relevant block's verdict/subtext with a `(per user context)` parenthetical; one that was **ruled out** is a single line wherever it's most relevant (often the ruled-out-dimensions block or a one-line note), e.g. "Checked LP2S at URL level per the user's note — ruled out; the drop was CE-wide." Never give a user prior its own headline block or inflate its emphasis beyond what the data supports — the report leads with the data-driven driver. (User context is not a lens or a tab, so it carries a plain parenthetical, not a `↗` anchor.)
 
 
 ## CVR-RCA-specific block specs

@@ -373,6 +373,40 @@ the weekday composition:
 
 See `context.md` → "Q3 Trend Interpretation" for full interpretation guide.
 
+**Signal 0 — user context (if present): priors that steer, not narrow**
+
+Check for `<run_dir>/user_context.md` — the manifest at
+`<run_dir>/orchestration.json` names it under `user_context` when the CE-RCA
+umbrella captured it; on a standalone run, detect it by file presence. If it
+isn't there, skip this signal entirely (most runs).
+
+When it *is* there, it carries the analyst's **Focus**, **Hypothesis priors**,
+and **Known events**. Treat it differently from every other external input:
+
+- **It is the one input allowed to steer branch selection.** Slack, perf-audit,
+  and CE Health are *lenses* — secondhand evidence held to Step 2b so they can't
+  bias the investigation. User context is the analyst's **intent**, which
+  legitimately directs where to look. So you read it here, at L0 — the deliberate
+  exception to the "lenses consulted only at Step 2b" rule.
+- **Priority, not tunnel-vision.** Each Hypothesis prior and Known event becomes
+  a **prioritised, falsifiable** first-pass branch — opened early in L2+,
+  *tested*, and able to be **RULED OUT**. Focus indicates which funnel step
+  leads. But these branches are **appended to** the data-driven default set, never
+  a replacement for it: Signals 1–3 (mix_dominance, shapley, trend) still run in
+  full and still determine the primary driver. **The data decides the leaf**, even
+  if it lands somewhere the user didn't point.
+- **Always closed.** Every user prior must be resolved as CONFIRMED / RULED OUT /
+  DATA GAP in the tree map — same discipline as the "close every quantified
+  signal" rule at the end of L2+. A prior is never silently dropped.
+- **Lean + proportional.** `user_context.md` is short by construction; don't let
+  it expand the investigation's scope or the report's emphasis beyond what the
+  data supports (proportional output is enforced at Step 2b / Step 3).
+
+Example: a prior "LP2S looks broken at the landing-page level" → open an
+LP2S × `page_url` branch early and test it; if shapley says S2C is the real
+driver, S2C still leads the report and the LP2S prior is closed (CONFIRMED as a
+secondary factor, or RULED OUT in one line).
+
 ---
 
 ### L1 — Mix cascade (routing vs conversion determination)
@@ -774,10 +808,11 @@ Save to: `<run_dir>/findings.md`
    for the trigger rule and `context.md → "Cross-cut query template"` for the
    query.
 
-**Context reconciliation (checks #9–#11) — read every available lens.** The
-next three checks all do the same thing with different inputs: reconcile your
-completed, data-driven picture against an external **lens** (Slack, perf-audit,
-CE Health). They share one model and one hard rule.
+**Context reconciliation (checks #9–#12) — read every available lens.** Checks
+#9–#11 each do the same thing with different inputs: reconcile your completed,
+data-driven picture against an external **lens** (Slack, perf-audit, CE Health).
+Check #12 closes the loop on user context (a different kind of input — see the
+exception note below). They share one model and one hard rule.
 
 - **The lens manifest.** Read `<run_dir>/orchestration.json` if it exists and
   use its `context_lenses` array as the authoritative list of lenses to
@@ -798,9 +833,15 @@ CE Health). They share one model and one hard rule.
   its own leaf first, so a lens *corroborates or surprises a completed picture*
   rather than steering branch selection. This is what keeps the investigation
   honest.
+- **User context is NOT a lens — it's the one exception.** `user_context.md`
+  (the analyst's intent) is read earlier, at L0 (Signal 0), because intent
+  legitimately steers where to look — unlike secondhand evidence. Here at Step 2b
+  it gets a second pass (check #12): close each prior and corroborate it, with
+  proportional output weight. So it appears at *both* ends, by design.
 - **Scalable by design.** A future lens (e.g., an AOV-RCA sibling) is one more
   manifest entry reconciled with the same model — not a new mechanism. Checks
-  #9–#11 below are the per-lens specifics for the three lenses that exist today.
+  #9–#11 below are the per-lens specifics for the three lenses that exist today;
+  check #12 handles user context.
 - **Reconcile widest-first, then synthesise together.** Read the lens that can
   most change your interpretation first: **CE Health (widest, upstream — can
   reframe the whole finding) → perf-audit (paid-side mechanism) → Slack
@@ -1017,6 +1058,36 @@ CE Health). They share one model and one hard rule.
     `ce_health_report.md` was actually present. A standalone `/cvr-rca` run has no
     CE Health lens and no CE Health tab, so it emits no such citation — never
     leave a dangling anchor.
+
+12. **User-context reconciliation** (only if `user_context.md` was present) — you
+    already read it at L0 (Signal 0) and opened the analyst's priors as
+    prioritised branches. Now close the loop:
+
+    **Close every prior.** Each Hypothesis prior and Known event from
+    `user_context.md` must be resolved in the tree map as CONFIRMED / RULED OUT /
+    DATA GAP — the same closing discipline as the "close every quantified signal"
+    rule above. A user prior is never left open or silently dropped; that is the
+    guarantee the analyst's input was actually used.
+
+    **Corroborate, don't confirm.** Reconcile each against your data-driven
+    findings with the same four-pattern model: **A** the data confirms the prior
+    (it was right — say so, weave it in); **B** the prior names a mechanism your
+    finding lacked (e.g. "pricing changed Apr 8" explains a price-driven S2C
+    drop); **C** the prior reframes (the user pointed at LP2S but the driver is
+    S2C — note both); **D** an untested prior worth one query. The prior carries
+    no special authority — the data can **RULE IT OUT**.
+
+    **Proportional output (the anti-overwhelm rule).** A user finding gets weight
+    proportional to *what the data shows*, not to how strongly the user asserted
+    it. Confirmed → woven into the relevant finding's narrative. Ruled out → a
+    single line ("Checked LP2S at URL level per the user's note — ruled out; the
+    drop was CE-wide, not page-specific"). The report still leads with the
+    data-driven primary driver; a prior becomes the headline only if the data
+    makes it so. Never let user context inflate the report's emphasis.
+
+    Cite the prior inline where it surfaces — `(per user context)` for a
+    corroboration, `(prompted by user context)` for a prior you tested. No
+    cross-tab anchor (user context isn't a tab); it's a plain parenthetical.
 
 Once all open items are resolved or explicitly accepted, proceed to Step 3.
 
@@ -1252,6 +1323,7 @@ not generic "investigate further" text.
 | c030 | 2026-05-22 | Perf-audit companion-skill integration. When the cascade fixes on Paid (conversion path at L2/L3, or routing exit at L2/L3), spawn the perf-audit sub-agent at the end of the cascade and continue immediately — mirrors the Slack fire-and-forget pattern. Sub-agent runs the standalone perf-audit skill ([aaradhyaraiHO/perf-audit-skill](https://github.com/aaradhyaraiHO/perf-audit-skill)) with the CE name and pre/post date windows; returns a structured summary at `<run_dir>/perf_audit_summary.md` and the full report at `<run_dir>/perf_audit_report.md`. Summary shape: overall verdict, traffic-quality assessment (SIS/CPC/Paid CVR trends), campaign status (pauses, tROAS suppression, budget exhaustion), one-sentence key finding, optional surprise hypothesis. Funnel data deliberately excluded from the summary — perf-audit's attribution differs from Mixpanel's, and CVR-RCA owns the funnel numbers. Step 2b gains check #10 (Perf-audit reconciliation): same four-pattern routing as Slack — Pattern A corroborates a leaf, B names the campaign-level *why*, C reframes the root cause when traffic quality degraded alongside a page finding, D tests a surprise hypothesis with one query max. Path resolution: `$PERF_AUDIT_SKILL_PATH` env var → `~/.perf-audit-skill/SKILL.md` (companion install) → sibling directory → legacy `~/Documents/perf-audit-skill/`. If none resolve, log "Perf-audit skill not installed — skipped" and continue. hypothesis.md LP2S and Mix sections gain background-context pointers explaining that the perf-audit verdict folds in at Step 2b, never during dimension-cut phase. INSTALL.md Step 6 adds an optional companion install. Perf-audit is consulted *only* at Step 2b — the data-driven branches must reach their own leaves before the perf-audit verdict is read, so it corroborates or surprises a completed picture rather than steering branch selection. |
 | c037 | 2026-05-29 | **Trimmed the "ignore `perf_audit_report.html`" defensive paragraph from Step 3.** The instruction was a one-off guardrail added in c036 (when perf-audit-skill had been emitting `.html` locally) but became obsolete once perf-audit-skill was rolled back to emitting markdown only. Carrying a defensive negation against a failure mode that can't occur is over-specification — it pollutes the spec with a CVR-RCA-vs-perf-audit-skill negotiation that future maintainers shouldn't need to understand. The canonical rule remains: "Tab 2 reads `perf_audit_report.md` and converts verbatim." Skill instructions should describe canonical behavior, not enumerate every potential failure mode. Companion change in `visual_kit.md` c005. |
 | c038 | 2026-06-03 | **Orchestration-handshake delegation check in the perf-audit spawn block** — enables CVR-RCA to run as a sub-skill of the new CE-RCA master skill without double-firing perf-audit. Before deciding to spawn the perf-audit sub-agent, CVR-RCA now checks for `<run_dir>/orchestration.json`; if `perf-audit-skill` appears in its `fired_by_master` array, a parent orchestrator is already running perf-audit against the same run directory, so CVR-RCA logs the delegation and skips its own spawn — then consumes the shared `perf_audit_report.md` at Step 2b check #10 as usual (the existing wait-for-file polling handles any timing race). Belt-and-braces secondary check: skip the spawn if `perf_audit_report.md` already exists even without an orchestration file. Standalone `/cvr-rca` runs are unchanged — neither file exists, so the normal spawn fires. This is the only CVR-RCA change required by the CE-RCA umbrella skill (which lives in its own repo and orchestrates CE Health → CVR-RCA + perf-audit → composite tabbed report). Sub-skill outputs remain verbatim; CVR-RCA's report and behavior are otherwise untouched. |
+| c042 | 2026-06-03 | **User context as a steering input (dual consumption).** CVR-RCA now reads `<run_dir>/user_context.md` (the analyst's intent, captured by the CE-RCA umbrella's Step 1 pause, or hand-placed in a standalone run) at **two** points. **L0 — new "Signal 0 — user context":** the analyst's Focus / Hypothesis priors / Known events become **prioritised, falsifiable** first-pass branches, opened early and *tested* (can be RULED OUT). This is the **one deliberate exception** to the "lenses consulted only at Step 2b" rule — user context is *intent* (legitimately steers where to look), not secondhand evidence (which must not bias branch selection). Guardrails baked in: **priority not tunnel-vision** (branches appended to, never replacing, the mix/shapley/trend default set; data still decides the leaf), **not narrow** (full orientation still runs), **always closed** (every prior resolved CONFIRMED/RULED OUT/DATA GAP via the close-every-quantified-signal rule). **Step 2b — new check #12:** close each prior + corroborate via the four-pattern model, with **proportional output** (a ruled-out hunch is one line; the report still leads with the data-driven driver — anti-overwhelm). Standalone-safe (no file → skip). Lean by construction (the master writes a short structured file, not a chat transcript). Companion: ce-rca v1.2.0 (m005) captures `user_context.md` at its Step 1 pause + adds the `user_context` pointer to `orchestration.json`. v1 is free-text only; files/Sheets/Slack channels are a deferred v2 slot. |
 | c041 | 2026-06-03 | **Sentra dashboard link deprecated.** Sentra is being retired, so the report header's dashboards row no longer creates a Sentra pill — Omni only. `report_structure.md → "Header — CVR-RCA-specific extensions"`: section retitled "Dashboards row — Omni + Sentra" → "Dashboards row — Omni"; the Sentra URL template, the Sentra `<a>` in the emitted HTML, and the pre-write sanity-check "Sentra link" mention all removed; the "render both links" instruction reduced to the Omni link. `visual_kit.md` Page-skeleton doc-comment updated to point at the renamed section. Historical changelog entries that reference Sentra (c032, visual_kit c002) are left intact — history is not rewritten. No code change; standalone and composite headers both render the Omni pill only. Companion ce-rca change: v1.1.2 (same Sentra trim in the master's meta.json instruction + composition docs). |
 | c040 | 2026-06-03 | **Provenance contract — source-agnostic External Signals table + required-elements check.** Two output-contract fixes (neither constrains the investigation; both govern what the finished report must contain). **(1) External Signals & Corroboration table.** The Section 3 "Market context & operational signals" block (Slack-only, rendered only when Slack returned a Pattern B/C signal) is generalised into a source-agnostic **"External signals & corroboration"** block that renders whenever **any** external lens (Slack, perf-audit, CE Health, future siblings) contributed a signal you *used* — one row per used signal, with a Source ↗ to the owning tab/thread. The Step 2b checks #9–#11 preamble gains a **provenance contract**: any external signal that informs a callout/verdict/narrative line must appear both woven in at the point of use *and* as a table row; this applies to every used signal regardless of pattern — **Pattern A corroborations now also earn a row** (check #10 Pattern A was previously inline-only, which is exactly why perf-audit signals silently dropped out of the table when Slack was unavailable, e.g. CE 243). A missing/unavailable lens becomes a disclosure row, never suppresses the table. Block keeps id `block-market-context` so existing ↗ citations resolve. Companion change `visual_kit.md` c007 (section renamed "Slack integration" → "External context integration & link-to-table styling", lens-agnostic; four-pattern surfacing table updated so A/B/C all earn a row). Added a **widest-first reading hint** to the preamble (CE Health → perf-audit → Slack, then synthesise together — a reading-order hint, not a rail). **(2) Required-elements check.** Step 3 gains a completeness contract: after writing the report, confirm always-on elements are present *and rendered* — most importantly the 90-day LY trend chart needs both `<div id="trend-90day">` and its `Plotly.newPlot('trend-90day', …)` script (the script was dropped in the CE 243 run, leaving an empty gap). Output contract only — fix before finishing. Backed by a new **advisory linter** `scripts/validate.py`, run at the end of Step 3: it flags missing/orphaned elements (e.g. a chart container with no `Plotly.newPlot` call — the exact 90-day failure mode, caught generically rather than by an enumerated list) and the absence of an External Signals table when external lenses were used. Cosmetic and advisory — runs only after the report is written, never edits, never blocks (exit 0 always); Claude adds or consciously skips each finding. Zero effect on investigation freedom. |
 | c039 | 2026-06-03 | **Manifest-driven context layer + CE Health as a new reconciliation lens.** Step 2b's per-lens reconciliation checks (#9 Slack, #10 perf-audit) are reframed under a shared "Context reconciliation — read every available lens" preamble: read the authoritative lens list from `<run_dir>/orchestration.json` `context_lenses` when present (master-orchestrated), else fall back to file-presence detection (standalone). One four-pattern model (A/B/C/D/Reject) applied per lens; lenses consulted ONLY at Step 2b, never during L0/L1/L2. New check #11 — **CE Health reconciliation**: when `ce_health_report.md` is present (CE-RCA umbrella ran CE Health first), reconcile funnel findings against the wide upstream lens. Two highest-value reconciliations: (A) entity-level cross-link — when a funnel drop is localized to an experience/TGID, corroborate against CE Health's revenue/RPC flag for that same entity (`CE Health: TGID 7148 RPC −30% ↗`); (C) headline-driver reframe — if CE Health's Shapley names AOV/Completion/Take Rate (factors CVR-RCA doesn't investigate) as the headline mover, say the funnel finding is real but not the headline and point to the CE Health tab. Cross-tab citations use `#cehealth-<slug>` anchors; standalone-safe (no CE Health present → no citation emitted). Scalable: a future sibling lens is one more manifest entry, same model. Companion change in `visual_kit.md` c006 (registers `summary-*` + `cehealth-*` anchor prefixes and the CE Health citation form). This is the CVR-RCA side of the cross-skill RCA work; the Summary synthesis tab and the orchestration manifest live in the CE-RCA repo. |
